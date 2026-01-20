@@ -1,6 +1,9 @@
+// src/services/api.js
 import axios from 'axios'
-import { useAuthStore } from '../stores/auth'
-import router from '../router'
+import { mockApi } from './mockData'
+
+// Флаг для переключения между mock и реальным API
+const USE_MOCK = true  // Поставь false когда будет готов бэкенд
 
 const api = axios.create({
   baseURL: '/api',
@@ -9,7 +12,7 @@ const api = axios.create({
   }
 })
 
-// Request interceptor - добавляем токен
+// Request interceptor
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -18,22 +21,21 @@ api.interceptors.request.use(
     }
     return config
   },
-  (error) => {
-    return Promise.reject(error)
-  }
+  (error) => Promise.reject(error)
 )
 
-// Response interceptor - обработка ошибок
+// Response interceptor
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      const authStore = useAuthStore()
-      authStore.logout()
-      router.push('/login')
+      localStorage.removeItem('token')
+      window.location.href = '/login'
     }
     return Promise.reject(error)
   }
 )
 
-export default api
+// Экспортируем либо mock, либо реальный API
+export default USE_MOCK ? mockApi : api
+export { USE_MOCK }
