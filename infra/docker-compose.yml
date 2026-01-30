@@ -5,51 +5,36 @@ services:
   gitlab:
     image: gitlab/gitlab-ce:latest
     container_name: gitlab
-    restart: always
     hostname: gitlab.local
+    restart: always
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://gitlab.local'
+        external_url 'http://gitlab.local:8929'
         gitlab_rails['gitlab_shell_ssh_port'] = 2224
-        # Отключаем встроенный Prometheus для экономии ресурсов
-        prometheus_monitoring['enable'] = false
-        # Настройки для интеграции с SonarQube
-        gitlab_rails['env'] = { 'SONAR_URL' => 'http://sonarqube:9000' }
+        # Отключаем лишние сервисы для экономии ресурсов
+        # Настройки для работы с runner
+        gitlab_rails['initial_root_password'] = 'AdminPassword123!'
     ports:
-      - "80:80"
-      - "443:443"
+      - "8929:8929"
       - "2224:22"
     volumes:
       - gitlab_config:/etc/gitlab
       - gitlab_logs:/var/log/gitlab
       - gitlab_data:/var/opt/gitlab
-    networks:
-      - devops-network
     shm_size: '256m'
-
-  # ==================== GitLab Runner 1 ====================
-  gitlab-runner-1:
-    image: gitlab/gitlab-runner:latest
-    container_name: gitlab-runner-1
-    restart: always
-    depends_on:
-      - gitlab
-    volumes:
-      - gitlab_runner_1_config:/etc/gitlab-runner
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - devops-network
 
-  # ==================== GitLab Runner 2 ====================
-  gitlab-runner-2:
+  # ==================== GitLab Runner ====================
+  gitlab-runner:
     image: gitlab/gitlab-runner:latest
-    container_name: gitlab-runner-2
+    container_name: gitlab-runner
     restart: always
+    volumes:
+      - runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
     depends_on:
       - gitlab
-    volumes:
-      - gitlab_runner_2_config:/etc/gitlab-runner
-      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - devops-network
 
@@ -58,58 +43,47 @@ services:
     image: sonarqube:lts-community
     container_name: sonarqube
     restart: always
-    depends_on:
-      - sonarqube-db
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonar-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: sonar
     ports:
       - "9000:9000"
-    environment:
-      - SONAR_JDBC_URL=jdbc:postgresql://sonarqube-db:5432/sonarqube
-      - SONAR_JDBC_USERNAME=sonarqube
-      - SONAR_JDBC_PASSWORD=sonarqube_password
-      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
     volumes:
       - sonarqube_data:/opt/sonarqube/data
       - sonarqube_logs:/opt/sonarqube/logs
       - sonarqube_extensions:/opt/sonarqube/extensions
+    depends_on:
+      - sonar-db
     networks:
       - devops-network
-    ulimits:
-      nofile:
-        soft: 65536
-        hard: 65536
 
   # ==================== PostgreSQL для SonarQube ====================
-  sonarqube-db:
+  sonar-db:
     image: postgres:15-alpine
-    container_name: sonarqube-db
+    container_name: sonar-db
     restart: always
     environment:
-      - POSTGRES_USER=sonarqube
-      - POSTGRES_PASSWORD=sonarqube_password
-      - POSTGRES_DB=sonarqube
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: sonar
+      POSTGRES_DB: sonar
     volumes:
-      - sonarqube_postgresql:/var/lib/postgresql/data
+      - sonar_postgres_data:/var/lib/postgresql/data
     networks:
       - devops-network
+
+# ==================== Volumes ====================
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  runner_config:
+  sonarqube_data:
+  sonarqube_logs:
+  sonarqube_extensions:
+  sonar_postgres_data:
 
 # ==================== Networks ====================
 networks:
   devops-network:
     driver: bridge
-
-# ==================== Volumes ====================
-volumes:
-  # GitLab volumes
-  gitlab_config:
-  gitlab_logs:
-  gitlab_data:
-  
-  # GitLab Runner volumes
-  gitlab_runner_1_config:
-  gitlab_runner_2_config:
-  
-  # SonarQube volumes
-  sonarqube_data:
-  sonarqube_logs:
-  sonarqube_extensions:
-  sonarqube_postgresql:
