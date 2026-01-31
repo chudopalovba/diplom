@@ -26,6 +26,9 @@ services:
   # ==================== GitLab Runner ====================
   gitlab-runner:
     image: gitlab/gitlab-runner:latest
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     container_name: gitlab-runner
     restart: always
     volumes:
@@ -85,3 +88,5 @@ volumes:
 networks:
   devops-network:
     driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1400"
