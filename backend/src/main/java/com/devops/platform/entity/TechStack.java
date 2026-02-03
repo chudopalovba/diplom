@@ -1,8 +1,8 @@
 package com.devops.platform.entity;
 
-import com.devops.entity.enums.BackendTech;
-import com.devops.entity.enums.DatabaseTech;
-import com.devops.entity.enums.FrontendTech;
+import com.devops.platform.entity.enums.BackendTech;
+import com.devops.platform.entity.enums.DatabaseTech;
+import com.devops.platform.entity.enums.FrontendTech;
 import jakarta.persistence.Column;
 import jakarta.persistence.Embeddable;
 import jakarta.persistence.EnumType;

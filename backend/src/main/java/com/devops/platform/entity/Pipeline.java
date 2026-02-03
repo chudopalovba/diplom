@@ -1,6 +1,6 @@
 package com.devops.platform.entity;
 
-import com.devops.entity.enums.PipelineStatus;
+import com.devops.platform.entity.enums.PipelineStatus;
 import jakarta.persistence.*;
 import lombok.*;
 

@@ -1,6 +1,7 @@
 package com.devops.platform.entity;
 
 import com.devops.entity.enums.ProjectStatus;
+import com.devops.platform.entity.enums.ProjectStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
