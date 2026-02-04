@@ -2,8 +2,18 @@ spring:
   application:
     name: devops-platform
   
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+
+---
+# Development profile (H2)
+spring:
+  config:
+    activate:
+      on-profile: dev
+  
   datasource:
-    url: jdbc:h2:mem:devops_platform;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    url: jdbc:h2:mem:devops_platform;DB_CLOSE_DELAY=-1
     username: sa
     password: 
     driver-class-name: org.h2.Driver
@@ -17,9 +27,42 @@ spring:
     hibernate:
       ddl-auto: create-drop
     show-sql: true
+
+---
+# Docker/Production profile (PostgreSQL)
+spring:
+  config:
+    activate:
+      on-profile: docker
+  
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:devops_platform}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      connection-timeout: 20000
+  
+  h2:
+    console:
+      enabled: false
+  
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
     properties:
       hibernate:
-        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+---
+# Common settings
+spring:
+  config:
+    activate:
+      on-profile: default
   
   jackson:
     serialization:
@@ -32,12 +75,12 @@ server:
     context-path: /api
 
 jwt:
-  secret: bXlTZWNyZXRLZXlGb3JKV1RUb2tlbkdlbmVyYXRpb25UaGF0SXNBdExlYXN0MjU2Qml0c0xvbmcxMjM0NTY=
-  expiration: 86400000
+  secret: ${JWT_SECRET:bXlTZWNyZXRLZXlGb3JKV1RUb2tlbkdlbmVyYXRpb25UaGF0SXNBdExlYXN0MjU2Qml0c0xvbmcxMjM0NTY=}
+  expiration: ${JWT_EXPIRATION:86400000}
 
 gitlab:
-  url: http://localhost:8929
-  token: 
+  url: ${GITLAB_URL:http://localhost:8929}
+  token: ${GITLAB_TOKEN:}
   default-branch: main
 
 management:
@@ -45,8 +88,10 @@ management:
     web:
       exposure:
         include: health,info
+  endpoint:
+    health:
+      show-details: always
 
 logging:
   level:
-    com.devops.platform: DEBUG
-    org.springframework.security: DEBUG
+    com.devops.platform: ${LOG_LEVEL:INFO}

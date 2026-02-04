@@ -1,10 +1,6 @@
-// src/services/api.js
 import axios from 'axios'
-import { mockApi } from './mockData'
 
-// Флаг для переключения между mock и реальным API
-const USE_MOCK = true  // Поставь false когда будет готов бэкенд
-
+// В Docker используем относительный путь, nginx проксирует на backend
 const api = axios.create({
   baseURL: '/api',
   headers: {
@@ -12,7 +8,7 @@ const api = axios.create({
   }
 })
 
-// Request interceptor
+// Request interceptor - добавляем токен
 api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('token')
@@ -21,10 +17,12 @@ api.interceptors.request.use(
     }
     return config
   },
-  (error) => Promise.reject(error)
+  (error) => {
+    return Promise.reject(error)
+  }
 )
 
-// Response interceptor
+// Response interceptor - обработка ошибок
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -36,6 +34,4 @@ api.interceptors.response.use(
   }
 )
 
-// Экспортируем либо mock, либо реальный API
-export default USE_MOCK ? mockApi : api
-export { USE_MOCK }
+export default api
