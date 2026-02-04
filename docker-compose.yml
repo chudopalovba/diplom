@@ -43,6 +43,8 @@ services:
       - DB_PASSWORD=postgres
       - JWT_SECRET=bXlTZWNyZXRLZXlGb3JKV1RUb2tlbkdlbmVyYXRpb25UaGF0SXNBdExlYXN0MjU2Qml0c0xvbmcxMjM0NTY=
       - LOG_LEVEL=DEBUG
+      - GITLAB_URL=http://gitlab:8929
+      - GITLAB_TOKEN=${GITLAB_TOKEN:-}
     ports:
       - "8080:8080"
     networks:
@@ -75,8 +77,34 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  gitlab:
+    image: gitlab/gitlab-ce:16.6.0-ce.0
+    container_name: devops-gitlab
+    hostname: gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://localhost:8929'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        gitlab_rails['initial_root_password'] = 'AdminPassword123!'
+        prometheus_monitoring['enable'] = false
+        grafana['enable'] = false
+    ports:
+      - "8929:8929"
+      - "2222:22"
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    networks:
+      - devops-network
+    shm_size: '512m'
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
 
 networks:
   devops-network:
