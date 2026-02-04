@@ -21,17 +21,17 @@ fi
 
 # Останавливаем старые контейнеры
 echo -e "${YELLOW}🛑 Останавливаем старые контейнеры...${NC}"
-docker-compose down 2>/dev/null || true
+docker compose down 2>/dev/null || true
 
 # Собираем и запускаем
 echo -e "${YELLOW}🔨 Сборка и запуск...${NC}"
-docker-compose up --build -d
+docker compose up --build -d
 
 # Ждём готовности
 echo -e "${YELLOW}⏳ Ожидание готовности сервисов...${NC}"
 
 echo -n "PostgreSQL: "
-until docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do
+until docker compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do
     echo -n "."
     sleep 2
 done

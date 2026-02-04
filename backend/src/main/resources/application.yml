@@ -1,69 +1,11 @@
+# ============================================
+# Common settings for all profiles
+# ============================================
 spring:
   application:
     name: devops-platform
-  
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
-
----
-# Development profile (H2)
-spring:
-  config:
-    activate:
-      on-profile: dev
-  
-  datasource:
-    url: jdbc:h2:mem:devops_platform;DB_CLOSE_DELAY=-1
-    username: sa
-    password: 
-    driver-class-name: org.h2.Driver
-  
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
-  
-  jpa:
-    hibernate:
-      ddl-auto: create-drop
-    show-sql: true
-
----
-# Docker/Production profile (PostgreSQL)
-spring:
-  config:
-    activate:
-      on-profile: docker
-  
-  datasource:
-    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:devops_platform}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:postgres}
-    driver-class-name: org.postgresql.Driver
-    hikari:
-      maximum-pool-size: 10
-      minimum-idle: 5
-      connection-timeout: 20000
-  
-  h2:
-    console:
-      enabled: false
-  
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: false
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-
----
-# Common settings
-spring:
-  config:
-    activate:
-      on-profile: default
-  
   jackson:
     serialization:
       write-dates-as-timestamps: false
@@ -71,8 +13,6 @@ spring:
 
 server:
   port: 8080
-  servlet:
-    context-path: /api
 
 jwt:
   secret: ${JWT_SECRET:bXlTZWNyZXRLZXlGb3JKV1RUb2tlbkdlbmVyYXRpb25UaGF0SXNBdExlYXN0MjU2Qml0c0xvbmcxMjM0NTY=}
@@ -94,4 +34,49 @@ management:
 
 logging:
   level:
-    com.devops.platform: ${LOG_LEVEL:INFO}
+    com.devops.platform: ${LOG_LEVEL:DEBUG}
+
+---
+# ============================================
+# Development Profile (H2)
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:mem:devops_platform;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+
+---
+# ============================================
+# Docker Profile (PostgreSQL)
+# ============================================
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:postgres}:${DB_PORT:5432}/${DB_NAME:devops_platform}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+  h2:
+    console:
+      enabled: false
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
