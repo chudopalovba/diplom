@@ -1,7 +1,10 @@
 package com.devops.platform.entity;
 
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 import org.springframework.security.core.GrantedAuthority;
@@ -19,62 +22,70 @@ import java.util.List;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-
-public class User implements UserDetails{
+public class User implements UserDetails {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
+    
     @Column(nullable = false, unique = true)
     private String username;
-
+    
     @Column(nullable = false, unique = true)
     private String email;
-
+    
     @Column(nullable = false)
     private String password;
-
+    
     @Column(name = "gitlab_user_id")
     private Long gitlabUserId;
-
+    
     @Column(name = "gitlab_username")
     private String gitlabUsername;
-
-    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true)
+    
+    @OneToMany(mappedBy = "owner", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @Builder.Default
     private List<Project> projects = new ArrayList<>();
-
+    
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-
+    
     @UpdateTimestamp
     @Column(name = "updated_at")
-    private LocalDateTime updateAt;
-
+    private LocalDateTime updatedAt;
+    
     @Override
-    public Collection<? extends GrantedAuthority> getAuthorities(){
+    public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_USER"));
     }
-
+    
     @Override
-    public boolean isAccountNoneExpired(){
+    public String getUsername() {
+        return email; // Используем email для аутентификации
+    }
+    
+    public String getRealUsername() {
+        return username;
+    }
+    
+    @Override
+    public boolean isAccountNonExpired() {
         return true;
     }
-
+    
     @Override
-    public boolean isAccountNonLocked(){
+    public boolean isAccountNonLocked() {
         return true;
     }
-
+    
     @Override
-    public boolean isCredentialNonExpired(){
+    public boolean isCredentialsNonExpired() {
         return true;
     }
-
+    
     @Override
-    public boolean isEnabled(){
+    public boolean isEnabled() {
         return true;
     }
 }

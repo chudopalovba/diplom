@@ -1,6 +1,6 @@
 package com.devops.platform.entity.enums;
 
-public enum PipelineStatus{
+public enum PipelineStatus {
     PENDING,
     RUNNING,
     SUCCESS,

@@ -2,14 +2,12 @@ package com.devops.platform.dto.response;
 
 import com.devops.platform.entity.Project;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class ProjectResponse {
@@ -26,7 +24,6 @@ public class ProjectResponse {
     private LocalDateTime updatedAt;
     
     @Data
-    @Builder
     @NoArgsConstructor
     @AllArgsConstructor
     public static class StackResponse {
@@ -37,22 +34,26 @@ public class ProjectResponse {
     }
     
     public static ProjectResponse fromEntity(Project project) {
-        return ProjectResponse.builder()
-                .id(project.getId())
-                .name(project.getName())
-                .description(project.getDescription())
-                .status(project.getStatus().name().toLowerCase())
-                .stack(StackResponse.builder()
-                        .backend(project.getStack().getBackend().name().toLowerCase())
-                        .frontend(project.getStack().getFrontend().name().toLowerCase())
-                        .database(project.getStack().getDatabase().name().toLowerCase())
-                        .useDocker(project.getStack().getUseDocker())
-                        .build())
-                .gitlabUrl(project.getGitlabUrl())
-                .gitCloneUrl(project.getGitCloneUrl())
-                .deployUrl(project.getDeployUrl())
-                .createdAt(project.getCreatedAt())
-                .updatedAt(project.getUpdatedAt())
-                .build();
+        ProjectResponse response = new ProjectResponse();
+        response.setId(project.getId());
+        response.setName(project.getName());
+        response.setDescription(project.getDescription());
+        response.setStatus(project.getStatus().name().toLowerCase());
+        
+        if (project.getStack() != null) {
+            StackResponse stackResponse = new StackResponse();
+            stackResponse.setBackend(project.getStack().getBackend().name().toLowerCase());
+            stackResponse.setFrontend(project.getStack().getFrontend().name().toLowerCase());
+            stackResponse.setDatabase(project.getStack().getDatabase().name().toLowerCase());
+            stackResponse.setUseDocker(project.getStack().getUseDocker());
+            response.setStack(stackResponse);
+        }
+        
+        response.setGitlabUrl(project.getGitlabUrl());
+        response.setGitCloneUrl(project.getGitCloneUrl());
+        response.setDeployUrl(project.getDeployUrl());
+        response.setCreatedAt(project.getCreatedAt());
+        response.setUpdatedAt(project.getUpdatedAt());
+        return response;
     }
 }

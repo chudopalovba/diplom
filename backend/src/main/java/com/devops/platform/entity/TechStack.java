@@ -17,21 +17,20 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-
-public class TechStack{
-
+public class TechStack {
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "backend_tech")
     private BackendTech backend;
-
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "frontend_tech")
     private FrontendTech frontend;
-
+    
     @Enumerated(EnumType.STRING)
     @Column(name = "database_tech")
     private DatabaseTech database;
-
+    
     @Column(name = "use_docker")
     private Boolean useDocker;
 }

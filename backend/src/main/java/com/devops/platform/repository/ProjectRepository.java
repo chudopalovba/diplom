@@ -19,9 +19,6 @@ public interface ProjectRepository extends JpaRepository<Project, Long> {
     
     boolean existsByNameAndOwner(String name, User owner);
     
-    @Query("SELECT p FROM Project p LEFT JOIN FETCH p.pipelines WHERE p.id = :id AND p.owner = :owner")
-    Optional<Project> findByIdAndOwnerWithPipelines(@Param("id") Long id, @Param("owner") User owner);
-    
     @Query("SELECT COUNT(p) FROM Project p WHERE p.owner = :owner")
     long countByOwner(@Param("owner") User owner);
     

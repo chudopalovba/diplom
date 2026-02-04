@@ -7,7 +7,6 @@
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/repository/ProjectRepository.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/dto/request/CreateProjectRequest.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/exception/GlobalExceptionHandler.java
-/home/bogdan/diplom/backend/src/main/java/com/devops/platform/service/CiCdFileService.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/dto/request/LoginRequest.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/service/JwtService.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/controller/PipelineController.java
@@ -22,7 +21,6 @@
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/dto/request/UpdateProfileRequest.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/controller/AuthController.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/config/GitLabConfig.java
-/home/bogdan/diplom/backend/src/main/java/com/devops/platform/service/GitLabService.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/entity/PipelineStage.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/DevOpsPlatformApplication.java
 /home/bogdan/diplom/backend/src/main/java/com/devops/platform/dto/response/ApiResponse.java

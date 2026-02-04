@@ -1,5 +1,5 @@
 package com.devops.platform.entity.enums;
 
-public enum DatabaseTech{
+public enum DatabaseTech {
     POSTGRES
 }

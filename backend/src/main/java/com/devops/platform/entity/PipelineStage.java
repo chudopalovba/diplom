@@ -2,7 +2,11 @@ package com.devops.platform.entity;
 
 import com.devops.platform.entity.enums.PipelineStatus;
 import jakarta.persistence.*;
-import lombok.*;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.ToString;
 
 @Entity
 @Table(name = "pipeline_stages")

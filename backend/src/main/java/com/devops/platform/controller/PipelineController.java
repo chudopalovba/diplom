@@ -3,7 +3,6 @@ package com.devops.platform.controller;
 import com.devops.platform.dto.response.ApiResponse;
 import com.devops.platform.dto.response.PipelineResponse;
 import com.devops.platform.service.PipelineService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -11,10 +10,13 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/projects/{projectId}")
-@RequiredArgsConstructor
 public class PipelineController {
     
     private final PipelineService pipelineService;
+    
+    public PipelineController(PipelineService pipelineService) {
+        this.pipelineService = pipelineService;
+    }
     
     @GetMapping("/pipeline")
     public ResponseEntity<PipelineResponse> getPipelineStatus(@PathVariable Long projectId) {

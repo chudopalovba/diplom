@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 @ConfigurationProperties(prefix = "gitlab")
 public class GitLabConfig {
     
-    private String url;
-    private String token;
+    private String url = "http://localhost:8929";
+    private String token = "";
     private String defaultBranch = "main";
 }

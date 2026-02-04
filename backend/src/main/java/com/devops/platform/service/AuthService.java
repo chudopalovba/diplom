@@ -8,8 +8,8 @@ import com.devops.platform.dto.response.AuthResponse;
 import com.devops.platform.dto.response.UserResponse;
 import com.devops.platform.entity.User;
 import com.devops.platform.exception.BadRequestException;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,16 +17,23 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class AuthService {
+    
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     
     private final UserService userService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
-    private final GitLabService gitLabService;
+    
+    public AuthService(UserService userService, JwtService jwtService, 
+                       PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager) {
+        this.userService = userService;
+        this.jwtService = jwtService;
+        this.passwordEncoder = passwordEncoder;
+        this.authenticationManager = authenticationManager;
+    }
     
     @Transactional
     public AuthResponse register(RegisterRequest request) {
@@ -40,39 +47,17 @@ public class AuthService {
             throw new BadRequestException("Имя пользователя уже занято");
         }
         
-        // Создаём пользователя в GitLab
-        Long gitlabUserId = null;
-        String gitlabUsername = null;
-        try {
-            var gitlabUser = gitLabService.createUser(
-                    request.getUsername(),
-                    request.getEmail(),
-                    request.getPassword()
-            );
-            gitlabUserId = gitlabUser.getId();
-            gitlabUsername = gitlabUser.getUsername();
-            log.info("GitLab user created: {}", gitlabUsername);
-        } catch (Exception e) {
-            log.warn("Failed to create GitLab user: {}", e.getMessage());
-            // Продолжаем без GitLab пользователя
-        }
-        
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
-                .gitlabUserId(gitlabUserId)
-                .gitlabUsername(gitlabUsername)
                 .build();
         
         user = userService.save(user);
         
         String token = jwtService.generateToken(user);
         
-        return AuthResponse.builder()
-                .token(token)
-                .user(UserResponse.fromEntity(user))
-                .build();
+        return AuthResponse.of(token, UserResponse.fromEntity(user));
     }
     
     public AuthResponse login(LoginRequest request) {
@@ -88,10 +73,7 @@ public class AuthService {
         User user = userService.findByEmail(request.getEmail());
         String token = jwtService.generateToken(user);
         
-        return AuthResponse.builder()
-                .token(token)
-                .user(UserResponse.fromEntity(user))
-                .build();
+        return AuthResponse.of(token, UserResponse.fromEntity(user));
     }
     
     public User getCurrentUser() {
@@ -103,7 +85,7 @@ public class AuthService {
     public UserResponse updateProfile(UpdateProfileRequest request) {
         User user = getCurrentUser();
         
-        if (request.getUsername() != null && !request.getUsername().equals(user.getUsername())) {
+        if (request.getUsername() != null && !request.getUsername().equals(user.getRealUsername())) {
             if (userService.existsByUsername(request.getUsername())) {
                 throw new BadRequestException("Имя пользователя уже занято");
             }

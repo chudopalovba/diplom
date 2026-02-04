@@ -2,12 +2,10 @@ package com.devops.platform.dto.response;
 
 import com.devops.platform.entity.PipelineStage;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PipelineStageResponse {
@@ -16,9 +14,9 @@ public class PipelineStageResponse {
     private String status;
     
     public static PipelineStageResponse fromEntity(PipelineStage stage) {
-        return PipelineStageResponse.builder()
-                .name(stage.getName())
-                .status(stage.getStatus().name().toLowerCase())
-                .build();
+        PipelineStageResponse response = new PipelineStageResponse();
+        response.setName(stage.getName());
+        response.setStatus(stage.getStatus().name().toLowerCase());
+        return response;
     }
 }

@@ -2,7 +2,6 @@ package com.devops.platform.dto.response;
 
 import com.devops.platform.entity.Pipeline;
 import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -11,7 +10,6 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @Data
-@Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class PipelineResponse {
@@ -24,15 +22,15 @@ public class PipelineResponse {
     private LocalDateTime finishedAt;
     
     public static PipelineResponse fromEntity(Pipeline pipeline) {
-        return PipelineResponse.builder()
-                .id(pipeline.getId())
-                .status(pipeline.getStatus().name().toLowerCase())
-                .stages(pipeline.getStages().stream()
-                        .map(PipelineStageResponse::fromEntity)
-                        .collect(Collectors.toList()))
-                .deployUrl(pipeline.getDeployUrl())
-                .startedAt(pipeline.getStartedAt())
-                .finishedAt(pipeline.getFinishedAt())
-                .build();
+        PipelineResponse response = new PipelineResponse();
+        response.setId(pipeline.getId());
+        response.setStatus(pipeline.getStatus().name().toLowerCase());
+        response.setStages(pipeline.getStages().stream()
+                .map(PipelineStageResponse::fromEntity)
+                .collect(Collectors.toList()));
+        response.setDeployUrl(pipeline.getDeployUrl());
+        response.setStartedAt(pipeline.getStartedAt());
+        response.setFinishedAt(pipeline.getFinishedAt());
+        return response;
     }
 }
