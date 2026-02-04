@@ -1,0 +1,84 @@
+stages:
+  - build
+  - test
+  - sonar
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+
+cache:
+  paths:
+    - .m2/repository
+    - frontend/node_modules
+
+# ==========================================
+# Backend
+# ==========================================
+
+backend-build:
+  stage: build
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - cd backend
+    - mvn clean package -DskipTests
+  artifacts:
+    paths:
+      - backend/target/*.jar
+    expire_in: 1 week
+
+backend-test:
+  stage: test
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - cd backend
+    - mvn test
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - backend/target/surefire-reports/*.xml
+
+# ==========================================
+# Frontend
+# ==========================================
+
+frontend-build:
+  stage: build
+  image: node:20-alpine
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist
+    expire_in: 1 week
+
+# ==========================================
+# SonarQube
+# ==========================================
+
+sonarqube:
+  stage: sonar
+  image: maven:3.9-eclipse-temurin-17
+  script:
+    - cd backend
+    - mvn sonar:sonar -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN
+  allow_failure: true
+  only:
+    - main
+
+# ==========================================
+# Deploy
+# ==========================================
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploying application..."
+  environment:
+    name: production
+  only:
+    - main
+  when: manual

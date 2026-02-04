@@ -1,0 +1,99 @@
+stages:
+  - build
+  - test
+  - sonar
+  - docker
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+cache:
+  paths:
+    - .pip-cache/
+    - frontend/node_modules
+
+# ==========================================
+# Backend (Python/Django)
+# ==========================================
+
+backend-build:
+  stage: build
+  image: python:3.11
+  script:
+    - cd backend
+    - pip install -r requirements.txt
+
+backend-test:
+  stage: test
+  image: python:3.11
+  services:
+    - postgres:15-alpine
+  variables:
+    POSTGRES_DB: test_db
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    DATABASE_URL: postgresql://postgres:postgres@postgres:5432/test_db
+  script:
+    - cd backend
+    - pip install -r requirements.txt
+    - python manage.py test
+
+# ==========================================
+# Frontend
+# ==========================================
+
+frontend-build:
+  stage: build
+  image: node:20-alpine
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist
+
+# ==========================================
+# SonarQube
+# ==========================================
+
+sonarqube:
+  stage: sonar
+  image: sonarsource/sonar-scanner-cli:latest
+  script:
+    - sonar-scanner -Dsonar.host.url=$SONAR_HOST_URL -Dsonar.token=$SONAR_TOKEN
+  allow_failure: true
+  only:
+    - main
+
+# ==========================================
+# Docker
+# ==========================================
+
+docker-build:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA ./backend
+    - docker build -t $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA ./frontend
+    - docker push $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA
+  only:
+    - main
+
+# ==========================================
+# Deploy
+# ==========================================
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploying..."
+  environment:
+    name: production
+  only:
+    - main
+  when: manual
