@@ -69,8 +69,8 @@ public class ProjectService {
                 .status(ProjectStatus.CREATED)
                 .stack(stack)
                 .owner(user)
-                .gitlabUrl("http://gitlab.local/" + user.getRealUsername() + "/" + request.getName())
-                .gitCloneUrl("git@gitlab.local:" + user.getRealUsername() + "/" + request.getName() + ".git")
+                .gitlabUrl("http://gitlab.local:8929/" + user.getRealUsername() + "/" + request.getName())
+                .gitCloneUrl("git@gitlab.local:8929:" + user.getRealUsername() + "/" + request.getName() + ".git")
                 .build();
         
         project = projectRepository.save(project);
