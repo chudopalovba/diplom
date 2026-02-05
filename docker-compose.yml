@@ -77,7 +77,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-    # ============================================
+  # ============================================
   # SonarQube
   # ============================================
   sonarqube-db:
@@ -112,8 +112,9 @@ services:
       - devops-network
     restart: unless-stopped
 
-
-
+  # ============================================
+  # Nexus
+  # ============================================
   nexus:
     image: sonatype/nexus3
     container_name: devops-nexus
@@ -125,7 +126,6 @@ services:
     networks:
       - devops-network
     restart: unless-stopped
-
 
   # ============================================
   # GitLab Runner
@@ -140,8 +140,9 @@ services:
     networks:
       - devops-network
 
-
-
+  # ============================================
+  # GitLab
+  # ============================================
   gitlab:
     image: gitlab/gitlab-ce:16.6.0-ce.0
     container_name: devops-gitlab
@@ -167,6 +168,57 @@ services:
     shm_size: '512m'
     restart: unless-stopped
 
+  # ============================================
+  # Monitoring: Prometheus + Grafana + cAdvisor
+  # ============================================
+
+
+  cadvisor:
+    image: ghcr.io/google/cadvisor
+    container_name: devops-cadvisor
+    privileged: true
+    command:
+      - --housekeeping_interval=10s
+      - --docker_only=true
+    ports:
+      - "8082:8080"
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:rw
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+
+  prometheus:
+    image: prom/prometheus:v2.52.0
+    container_name: devops-prometheus
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - devops-network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: devops-grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - devops-network
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
 volumes:
   postgres_data:
   gitlab_config:
@@ -178,8 +230,7 @@ volumes:
   sonarqube_logs:
   gitlab_runner_config:
   nexus-data:
-
-
+  grafana-data:
 
 networks:
   devops-network:
