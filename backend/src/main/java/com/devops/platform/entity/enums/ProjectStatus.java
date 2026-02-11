@@ -2,7 +2,9 @@ package com.devops.platform.entity.enums;
 
 public enum ProjectStatus {
     CREATED,
-    DEVELOPING,
+    ACTIVE,
+    BUILDING,
+    DEPLOYING,
     DEPLOYED,
     FAILED
 }

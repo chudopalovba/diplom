@@ -19,99 +19,141 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthService {
-    
-    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
-    
+
+    private static final Logger log =
+            LoggerFactory.getLogger(AuthService.class);
+
     private final UserService userService;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
-    
-    public AuthService(UserService userService, JwtService jwtService, 
-                       PasswordEncoder passwordEncoder, AuthenticationManager authenticationManager) {
+    private final GitLabService gitLabService;
+
+    public AuthService(UserService userService,
+                       JwtService jwtService,
+                       PasswordEncoder passwordEncoder,
+                       AuthenticationManager authenticationManager,
+                       GitLabService gitLabService) {
         this.userService = userService;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
         this.authenticationManager = authenticationManager;
+        this.gitLabService = gitLabService;
     }
-    
+
     @Transactional
     public AuthResponse register(RegisterRequest request) {
         log.info("Registering new user: {}", request.getEmail());
-        
+
         if (userService.existsByEmail(request.getEmail())) {
             throw new BadRequestException("Email уже используется");
         }
-        
+
         if (userService.existsByUsername(request.getUsername())) {
             throw new BadRequestException("Имя пользователя уже занято");
         }
-        
+
+        // ── Создаём пользователя на платформе ──
         User user = User.builder()
                 .username(request.getUsername())
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .build();
-        
+
+        // ── Создаём пользователя в GitLab ──
+        try {
+            GitLabService.GitLabUserInfo gitlabUser =
+                    gitLabService.createUser(
+                            request.getEmail(),
+                            request.getUsername(),
+                            request.getPassword(),  // raw-пароль
+                            request.getUsername()    // name
+                    );
+
+            user.setGitlabUserId(gitlabUser.getId());
+            user.setGitlabUsername(gitlabUser.getUsername());
+
+            log.info("GitLab user created: email={}, gitlabId={}, "
+                            + "gitlabUsername={}",
+                    request.getEmail(),
+                    gitlabUser.getId(),
+                    gitlabUser.getUsername());
+
+        } catch (Exception e) {
+            log.error("FAILED to create GitLab user for {}: {}",
+                    request.getEmail(), e.getMessage());
+            // Продолжаем регистрацию без GitLab
+            // (GitLab можно привязать позже)
+        }
+
         user = userService.save(user);
-        
+
         String token = jwtService.generateToken(user);
-        
+
         return AuthResponse.of(token, UserResponse.fromEntity(user));
     }
-    
+
     public AuthResponse login(LoginRequest request) {
         log.info("User login attempt: {}", request.getEmail());
-        
+
         authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(
                         request.getEmail(),
                         request.getPassword()
                 )
         );
-        
+
         User user = userService.findByEmail(request.getEmail());
         String token = jwtService.generateToken(user);
-        
+
         return AuthResponse.of(token, UserResponse.fromEntity(user));
     }
-    
+
     public User getCurrentUser() {
-        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        String email = SecurityContextHolder.getContext()
+                .getAuthentication().getName();
         return userService.findByEmail(email);
     }
-    
+
     @Transactional
     public UserResponse updateProfile(UpdateProfileRequest request) {
         User user = getCurrentUser();
-        
-        if (request.getUsername() != null && !request.getUsername().equals(user.getRealUsername())) {
+
+        if (request.getUsername() != null
+                && !request.getUsername()
+                .equals(user.getRealUsername())) {
             if (userService.existsByUsername(request.getUsername())) {
-                throw new BadRequestException("Имя пользователя уже занято");
+                throw new BadRequestException(
+                        "Имя пользователя уже занято");
             }
             user.setUsername(request.getUsername());
         }
-        
-        if (request.getEmail() != null && !request.getEmail().equals(user.getEmail())) {
+
+        if (request.getEmail() != null
+                && !request.getEmail().equals(user.getEmail())) {
             if (userService.existsByEmail(request.getEmail())) {
-                throw new BadRequestException("Email уже используется");
+                throw new BadRequestException(
+                        "Email уже используется");
             }
             user.setEmail(request.getEmail());
         }
-        
+
         user = userService.save(user);
         return UserResponse.fromEntity(user);
     }
-    
+
     @Transactional
     public void changePassword(ChangePasswordRequest request) {
         User user = getCurrentUser();
-        
-        if (!passwordEncoder.matches(request.getCurrentPassword(), user.getPassword())) {
+
+        if (!passwordEncoder.matches(
+                request.getCurrentPassword(),
+                user.getPassword())) {
             throw new BadRequestException("Неверный текущий пароль");
         }
-        
-        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        user.setPassword(
+                passwordEncoder.encode(request.getNewPassword()));
         userService.save(user);
     }
 }

@@ -43,7 +43,12 @@ services:
       - DB_PASSWORD=postgres
       - JWT_SECRET=bXlTZWNyZXRLZXlGb3JKV1RUb2tlbkdlbmVyYXRpb25UaGF0SXNBdExlYXN0MjU2Qml0c0xvbmcxMjM0NTY=
       - LOG_LEVEL=DEBUG
-      - GITLAB_URL=http://gitlab:8929/
+      # ══════════════════════════════════════════════════════════
+      # GITLAB_URL — внутренний адрес (docker-сеть, порт 80)
+      # GITLAB_EXTERNAL_URL — для ссылок пользователю (браузер)
+      # ══════════════════════════════════════════════════════════
+      - GITLAB_URL=http://gitlab
+      - GITLAB_EXTERNAL_URL=http://localhost:8929
       - GITLAB_TOKEN=glpat-4p7i43XqAo_LxF_VLf9A
     ports:
       - "8080:8080"
@@ -59,7 +64,6 @@ services:
       retries: 5
       start_period: 90s
     restart: unless-stopped
-
   # ============================================
   # Frontend
   # ============================================
@@ -149,13 +153,13 @@ services:
     hostname: gitlab
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://gitlab:8929'
+        external_url 'http://gitlab'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
         nginx['listen_addresses'] = ['0.0.0.0'] 
         prometheus_monitoring['enable'] = false
         grafana['enable'] = false
     ports:
-      - "8929:8929"
+      - "8929:80"
       - "2222:22"
     volumes:
       - gitlab_config:/etc/gitlab

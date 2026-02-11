@@ -11,18 +11,31 @@ import java.time.LocalDateTime;
 @NoArgsConstructor
 @AllArgsConstructor
 public class UserResponse {
-    
+
     private Long id;
     private String username;
     private String email;
+    private String gitlabUsername;
+    private String gitlabProfileUrl;
     private LocalDateTime createdAt;
-    
+
     public static UserResponse fromEntity(User user) {
         UserResponse response = new UserResponse();
         response.setId(user.getId());
         response.setUsername(user.getRealUsername());
         response.setEmail(user.getEmail());
         response.setCreatedAt(user.getCreatedAt());
+
+        // GitLab info
+        response.setGitlabUsername(user.getGitlabUsername());
+        if (user.getGitlabUsername() != null) {
+            // Формируем ссылку на профиль
+            // (внешний URL подставится на фронте,
+            //  или можно хранить в User)
+            response.setGitlabProfileUrl(
+                    user.getGitlabUsername());
+        }
+
         return response;
     }
 }
