@@ -131,18 +131,7 @@ services:
       - devops-network
     restart: unless-stopped
 
-  # ============================================
-  # GitLab Runner
-  # ============================================
-  gitlab-runner:
-    image: gitlab/gitlab-runner:alpine
-    container_name: devops-gitlab-runner
-    restart: unless-stopped
-    volumes:
-      - gitlab_runner_config:/etc/gitlab-runner
-      - /var/run/docker.sock:/var/run/docker.sock
-    networks:
-      - devops-network
+
 
   # ============================================
   # GitLab
@@ -150,13 +139,11 @@ services:
   gitlab:
     image: gitlab/gitlab-ce:16.6.0-ce.0
     container_name: devops-gitlab
-    hostname: gitlab
+    hostname: gitlab.local
     environment:
       GITLAB_OMNIBUS_CONFIG: |
-        external_url 'http://gitlab'
+        external_url 'http://gitlab.local:8929'
         gitlab_rails['gitlab_shell_ssh_port'] = 2222
-        nginx['listen_port'] = 80
-        nginx['listen_https'] = false
         prometheus_monitoring['enable'] = false
         grafana['enable'] = false
     ports:
