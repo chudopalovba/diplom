@@ -145,20 +145,31 @@ public class GitLabService {
      * Создать проект внутри группы.
      * Пользователь получает права Maintainer на проект.
      */
+        /**
+     * Создать проект внутри группы.
+     */
     public GitLabProjectInfo createProjectInGroup(String projectName,
                                                    String ownerUsername,
                                                    Long gitlabUserId) {
 
         Long groupId = gitLabConfig.getGitlabGroupId();
 
+        if (groupId == null || groupId == 0) {
+            throw new RuntimeException(
+                    "GITLAB_GROUP_ID не настроен. Проверьте конфигурацию.");
+        }
+
         String sanitizedUsername = sanitizeUsername(ownerUsername);
         String sanitizedProject = sanitizeProjectPath(projectName);
 
-        // Имя для отображения: "username-projectname"
+        // Имя для отображения
         String displayName = sanitizedUsername + "-" + sanitizedProject;
 
-        // Path в URL: добавляем "-app" чтобы избежать зарезервированных имён
-        String projectPath = sanitizedUsername + "-" + sanitizedProject + "-app";
+        // Path: prefix "proj-" чтобы гарантированно избежать reserved names
+        String projectPath = "proj-" + sanitizedUsername + "-" + sanitizedProject;
+
+        log.info("Creating GitLab project: name='{}', path='{}', groupId={}",
+                displayName, projectPath, groupId);
 
         String url = apiUrl("/api/v4/projects");
 
@@ -166,7 +177,7 @@ public class GitLabService {
         body.put("name", displayName);
         body.put("path", projectPath);
         body.put("namespace_id", groupId);
-        body.put("visibility", "private");
+        body.put("visibility", "internal");
         body.put("initialize_with_readme", false);
 
         HttpEntity<Map<String, Object>> request =
@@ -180,7 +191,7 @@ public class GitLabService {
             log.info("GitLab project CREATED in group: id={}, path={}",
                     project.getId(), project.getPathWithNamespace());
 
-            // Дать пользователю права Maintainer на проект
+            // Дать пользователю права Maintainer
             addProjectMember(project.getId(), gitlabUserId, 40);
 
             return project;
@@ -192,7 +203,6 @@ public class GitLabService {
                     "Ошибка создания проекта GitLab: " + e.getMessage(), e);
         }
     }
-
     /**
      * Дать пользователю права на проект.
      * accessLevel: 30=Developer, 40=Maintainer

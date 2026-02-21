@@ -50,7 +50,7 @@ services:
       - GITLAB_URL=http://gitlab
       - GITLAB_EXTERNAL_URL=http://gitlab.local:8929
       - GITLAB_TOKEN=glpat-GMw-1xhdwsi3nLP8R6AZ
-      - GITLAB_GROUP_ID=13
+      - GITLAB_GROUP_ID=14
     ports:
       - "8080:8080"
     networks:
