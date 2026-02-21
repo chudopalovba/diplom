@@ -10,29 +10,6 @@
           <h1 class="page-title">{{ project.name }}</h1>
           <span class="badge" :class="statusClass">{{ statusLabel }}</span>
         </div>
-        <div class="header-actions">
-          <button 
-            @click="runBuild" 
-            class="btn btn-secondary"
-            :disabled="actionLoading"
-          >
-            🔨 Собрать
-          </button>
-          <button 
-            @click="runSonar" 
-            class="btn btn-secondary"
-            :disabled="actionLoading"
-          >
-            🔍 SonarQube
-          </button>
-          <button 
-            @click="runDeploy" 
-            class="btn btn-primary"
-            :disabled="actionLoading"
-          >
-            🚀 Развернуть
-          </button>
-        </div>
       </div>
 
       <div class="project-content">
@@ -86,13 +63,6 @@
         </div>
 
         <div class="side-column">
-          <!-- Pipeline Status -->
-          <PipelineStatus 
-            :pipeline="pipelineStatus"
-            :loading="pipelineLoading"
-            @refresh="fetchPipelineStatus"
-          />
-
           <!-- Quick Actions -->
           <div class="card">
             <div class="card-header">
@@ -101,6 +71,14 @@
             <div class="quick-actions">
               <a :href="project.gitlabUrl" target="_blank" class="action-link">
                 🦊 Открыть в GitLab
+              </a>
+              <a 
+                v-if="project.gitlabUrl" 
+                :href="project.gitlabUrl + '/-/pipelines'" 
+                target="_blank" 
+                class="action-link"
+              >
+                🔄 Пайплайны в GitLab
               </a>
               <a 
                 v-if="project.deployUrl" 
@@ -135,7 +113,6 @@ import { useProjectStore } from '../stores/project'
 import { useNotificationStore } from '../stores/notification'
 import { PROJECT_STATUSES, BACKEND_TECHNOLOGIES, FRONTEND_TECHNOLOGIES } from '../utils/constants'
 import Loader from '../components/common/Loader.vue'
-import PipelineStatus from '../components/project/PipelineStatus.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -143,10 +120,7 @@ const projectStore = useProjectStore()
 const notificationStore = useNotificationStore()
 
 const loading = ref(true)
-const actionLoading = ref(false)
-const pipelineLoading = ref(false)
 const project = computed(() => projectStore.currentProject)
-const pipelineStatus = computed(() => projectStore.pipelineStatus)
 
 const statusClass = computed(() => 
   PROJECT_STATUSES[project.value?.status]?.class || 'badge-info'
@@ -165,54 +139,6 @@ const fetchProject = async () => {
     await projectStore.fetchProject(route.params.id)
   } finally {
     loading.value = false
-  }
-}
-
-const fetchPipelineStatus = async () => {
-  pipelineLoading.value = true
-  try {
-    await projectStore.fetchPipelineStatus(route.params.id)
-  } finally {
-    pipelineLoading.value = false
-  }
-}
-
-const runBuild = async () => {
-  actionLoading.value = true
-  try {
-    await projectStore.triggerBuild(route.params.id)
-    notificationStore.success('Сборка запущена!')
-    fetchPipelineStatus()
-  } catch (error) {
-    notificationStore.error('Ошибка запуска сборки')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const runSonar = async () => {
-  actionLoading.value = true
-  try {
-    await projectStore.runSonarQube(route.params.id)
-    notificationStore.success('Анализ SonarQube запущен!')
-    fetchPipelineStatus()
-  } catch (error) {
-    notificationStore.error('Ошибка запуска анализа')
-  } finally {
-    actionLoading.value = false
-  }
-}
-
-const runDeploy = async () => {
-  actionLoading.value = true
-  try {
-    await projectStore.triggerDeploy(route.params.id)
-    notificationStore.success('Деплой запущен!')
-    fetchPipelineStatus()
-  } catch (error) {
-    notificationStore.error('Ошибка запуска деплоя')
-  } finally {
-    actionLoading.value = false
   }
 }
 
@@ -235,7 +161,6 @@ const deleteProject = async () => {
 
 onMounted(() => {
   fetchProject()
-  fetchPipelineStatus()
 })
 </script>
 
@@ -268,11 +193,6 @@ onMounted(() => {
 
 .header-info .page-title {
   margin-bottom: 0;
-}
-
-.header-actions {
-  display: flex;
-  gap: 12px;
 }
 
 .project-content {
@@ -398,10 +318,6 @@ onMounted(() => {
   .page-header {
     flex-direction: column;
     gap: 20px;
-  }
-  
-  .header-actions {
-    flex-wrap: wrap;
   }
 }
 </style>

@@ -5,7 +5,6 @@ export const useProjectStore = defineStore('project', {
   state: () => ({
     projects: [],
     currentProject: null,
-    pipelineStatus: null,
     loading: false,
     error: null
   }),
@@ -56,23 +55,6 @@ export const useProjectStore = defineStore('project', {
     async deleteProject(id) {
       await projectService.deleteProject(id)
       this.projects = this.projects.filter(p => p.id !== id)
-    },
-
-    async triggerBuild(projectId) {
-      return await projectService.triggerBuild(projectId)
-    },
-
-    async triggerDeploy(projectId) {
-      return await projectService.triggerDeploy(projectId)
-    },
-
-    async runSonarQube(projectId) {
-      return await projectService.runSonarQube(projectId)
-    },
-
-    async fetchPipelineStatus(projectId) {
-      this.pipelineStatus = await projectService.getPipelineStatus(projectId)
-      return this.pipelineStatus
     }
   }
 })
