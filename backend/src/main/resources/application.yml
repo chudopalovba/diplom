@@ -19,10 +19,11 @@ jwt:
   expiration: ${JWT_EXPIRATION:86400000}
 
 gitlab:
-  url: ${GITLAB_URL:http://localhost:8929}
-  external-url: ${GITLAB_EXTERNAL_URL:http://localhost:8929}
+  url: ${GITLAB_URL:http://gitlab.local:8929}
+  external-url: ${GITLAB_EXTERNAL_URL:http://gitlab.local:8929}
   token: ${GITLAB_TOKEN:}
   default-branch: main
+  group-id: ${GITLAB_GROUP_ID:13}
 
 management:
   endpoints:
