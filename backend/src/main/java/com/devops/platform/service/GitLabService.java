@@ -39,8 +39,7 @@ public class GitLabService {
     // =========================================================================
 
     /**
-     * Создать пользователя в GitLab с такими же email и паролем.
-     * Admin API: POST /api/v4/users
+     * Создать пользователя в GitLab и добавить в группу.
      */
     public GitLabUserInfo createUser(String email, String username,
                                      String password, String name) {
@@ -51,24 +50,24 @@ public class GitLabService {
         body.put("password", password);
         body.put("username", sanitizeUsername(username));
         body.put("name", (name != null && !name.isBlank()) ? name : username);
-        body.put("skip_confirmation", true);   // без подтверждения email
+        body.put("skip_confirmation", true);
         body.put("force_random_password", false);
 
         HttpEntity<Map<String, Object>> request =
                 new HttpEntity<>(body, authHeaders());
 
+        GitLabUserInfo user;
+
         try {
             ResponseEntity<GitLabUserInfo> response = restTemplate.exchange(
                     url, HttpMethod.POST, request, GitLabUserInfo.class);
-
-            GitLabUserInfo user = response.getBody();
-            log.info("GitLab user CREATED: id={}, username={}, email={}",
-                    user.getId(), user.getUsername(), user.getEmail());
-            return user;
+            user = response.getBody();
+            log.info("GitLab user CREATED: id={}, username={}",
+                    user.getId(), user.getUsername());
 
         } catch (HttpClientErrorException.Conflict e) {
             log.warn("GitLab user conflict (email={}), searching existing", email);
-            return findUserByEmail(email)
+            user = findUserByEmail(email)
                     .orElseThrow(() -> new RuntimeException(
                             "GitLab user conflict, cannot find by email: " + email));
 
@@ -77,6 +76,40 @@ public class GitLabService {
                     e.getStatusCode(), e.getResponseBodyAsString());
             throw new RuntimeException(
                     "Ошибка создания пользователя GitLab: " + e.getMessage(), e);
+        }
+
+        // Добавляем пользователя в группу
+        addUserToGroup(user.getId());
+
+        return user;
+    }
+
+    /**
+     * Добавить пользователя в группу платформы.
+     * access_level: 30 = Developer
+     */
+    public void addUserToGroup(Long gitlabUserId) {
+        Long groupId = gitLabConfig.getGitlabGroupId();
+        String url = apiUrl("/api/v4/groups/" + groupId + "/members");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("user_id", gitlabUserId);
+        body.put("access_level", 30);
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(body, authHeaders());
+
+        try {
+            restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+            log.info("User {} added to group {} as Developer",
+                    gitlabUserId, groupId);
+
+        } catch (HttpClientErrorException.Conflict e) {
+            log.warn("User {} already member of group {}", gitlabUserId, groupId);
+
+        } catch (HttpClientErrorException e) {
+            log.error("Add user to group FAILED: {} — {}",
+                    e.getStatusCode(), e.getResponseBodyAsString());
         }
     }
 
@@ -105,20 +138,34 @@ public class GitLabService {
     }
 
     // =========================================================================
-    //  PROJECT OPERATIONS
+    //  PROJECT OPERATIONS — В ГРУППЕ
     // =========================================================================
 
     /**
-     * Создать проект в namespace пользователя.
-     * Admin API: POST /api/v4/projects/user/:user_id
+     * Создать проект внутри группы.
+     * Пользователь получает права Maintainer на проект.
      */
-    public GitLabProjectInfo createProject(String projectName,
-                                           Long gitlabUserId) {
-        String url = apiUrl("/api/v4/projects/user/" + gitlabUserId);
+    public GitLabProjectInfo createProjectInGroup(String projectName,
+                                                   String ownerUsername,
+                                                   Long gitlabUserId) {
+
+        Long groupId = gitLabConfig.getGitlabGroupId();
+
+        String sanitizedUsername = sanitizeUsername(ownerUsername);
+        String sanitizedProject = sanitizeProjectPath(projectName);
+
+        // Имя для отображения: "username-projectname"
+        String displayName = sanitizedUsername + "-" + sanitizedProject;
+
+        // Path в URL: добавляем "-app" чтобы избежать зарезервированных имён
+        String projectPath = sanitizedUsername + "-" + sanitizedProject + "-app";
+
+        String url = apiUrl("/api/v4/projects");
 
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("name", projectName);
-        body.put("path", sanitizeProjectPath(projectName));
+        body.put("name", displayName);
+        body.put("path", projectPath);
+        body.put("namespace_id", groupId);
         body.put("visibility", "private");
         body.put("initialize_with_readme", false);
 
@@ -130,8 +177,12 @@ public class GitLabService {
                     url, HttpMethod.POST, request, GitLabProjectInfo.class);
 
             GitLabProjectInfo project = response.getBody();
-            log.info("GitLab project CREATED: id={}, path={}",
+            log.info("GitLab project CREATED in group: id={}, path={}",
                     project.getId(), project.getPathWithNamespace());
+
+            // Дать пользователю права Maintainer на проект
+            addProjectMember(project.getId(), gitlabUserId, 40);
+
             return project;
 
         } catch (HttpClientErrorException e) {
@@ -143,8 +194,37 @@ public class GitLabService {
     }
 
     /**
+     * Дать пользователю права на проект.
+     * accessLevel: 30=Developer, 40=Maintainer
+     */
+    public void addProjectMember(Long gitlabProjectId,
+                                  Long gitlabUserId,
+                                  int accessLevel) {
+        String url = apiUrl("/api/v4/projects/" + gitlabProjectId + "/members");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("user_id", gitlabUserId);
+        body.put("access_level", accessLevel);
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(body, authHeaders());
+
+        try {
+            restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+            log.info("User {} added to project {} with access_level={}",
+                    gitlabUserId, gitlabProjectId, accessLevel);
+
+        } catch (HttpClientErrorException.Conflict e) {
+            log.warn("User {} already member of project {}",
+                    gitlabUserId, gitlabProjectId);
+
+        } catch (HttpClientErrorException e) {
+            log.error("Add project member FAILED: {}", e.getMessage());
+        }
+    }
+
+    /**
      * Удалить проект в GitLab.
-     * DELETE /api/v4/projects/:id
      */
     public void deleteProject(Long gitlabProjectId) {
         if (gitlabProjectId == null) return;
@@ -167,8 +247,7 @@ public class GitLabService {
     // =========================================================================
 
     /**
-     * Запушить файлы одним коммитом через Commits API.
-     * POST /api/v4/projects/:id/repository/commits
+     * Запушить файлы одним коммитом.
      */
     public void commitFiles(Long gitlabProjectId,
                             Map<String, String> files,
@@ -207,7 +286,7 @@ public class GitLabService {
     }
 
     /**
-     * Собрать шаблонные файлы и запушить в репозиторий.
+     * Собрать шаблонные файлы и запушить.
      */
     public void pushProjectTemplate(Long gitlabProjectId,
                                     String projectName,
@@ -218,7 +297,7 @@ public class GitLabService {
 
         Map<String, String> files = new LinkedHashMap<>();
 
-        // ── .gitlab-ci.yml ────────────────────────────────────────
+        // .gitlab-ci.yml
         String ciFileName = buildCiFileName(backendTech, useDocker);
         String ciContent = readResource("templates/gitlab-ci/" + ciFileName);
         if (ciContent != null) {
@@ -227,13 +306,13 @@ public class GitLabService {
             log.warn("CI template not found: {}", ciFileName);
         }
 
-        // ── .gitignore ───────────────────────────────────────────
+        // .gitignore
         String gitignore = readResource("templates/gitignore.txt");
         if (gitignore != null) {
             files.put(".gitignore", gitignore);
         }
 
-        // ── README.md ────────────────────────────────────────────
+        // README.md
         String readme = readResource("templates/README.md");
         if (readme != null) {
             readme = replacePlaceholders(readme, projectName,
@@ -241,13 +320,13 @@ public class GitLabService {
             files.put("README.md", readme);
         }
 
-        // ── Backend files ────────────────────────────────────────
+        // Backend files
         files.putAll(collectBackendFiles(backendTech, projectName));
 
-        // ── Frontend files ───────────────────────────────────────
+        // Frontend files
         files.putAll(collectFrontendFiles(frontendTech, projectName));
 
-        // ── Commit ───────────────────────────────────────────────
+        // Commit
         if (!files.isEmpty()) {
             String msg = String.format(
                     "Initial project setup [%s + %s, docker=%s]",
@@ -265,7 +344,7 @@ public class GitLabService {
     // =========================================================================
 
     /**
-     * POST /api/v4/projects/:id/pipeline
+     * Запустить пайплайн.
      */
     public GitLabPipelineInfo triggerPipeline(Long gitlabProjectId,
                                              String ref) {
@@ -294,7 +373,7 @@ public class GitLabService {
     }
 
     /**
-     * GET /api/v4/projects/:id/pipelines/:pipeline_id
+     * Получить статус пайплайна.
      */
     public GitLabPipelineInfo getPipelineStatus(Long gitlabProjectId,
                                                 Long pipelineId) {
@@ -309,7 +388,7 @@ public class GitLabService {
     }
 
     /**
-     * GET /api/v4/projects/:id/pipelines
+     * Список последних пайплайнов.
      */
     public List<GitLabPipelineInfo> listPipelines(Long gitlabProjectId) {
         String url = apiUrl("/api/v4/projects/" + gitlabProjectId
@@ -324,7 +403,7 @@ public class GitLabService {
     }
 
     /**
-     * GET /api/v4/projects/:id/pipelines/:pipeline_id/jobs
+     * Jobs пайплайна.
      */
     public List<GitLabJobInfo> getPipelineJobs(Long gitlabProjectId,
                                                Long pipelineId) {
@@ -340,11 +419,107 @@ public class GitLabService {
     }
 
     // =========================================================================
+    //  GROUP VARIABLE OPERATIONS
+    // =========================================================================
+
+    /**
+     * Добавить CI/CD переменную на уровне группы.
+     * Доступна во всех проектах группы.
+     */
+    public void addGroupVariable(String key, String value,
+                                  boolean masked, boolean isProtected) {
+        Long groupId = gitLabConfig.getGitlabGroupId();
+        String url = apiUrl("/api/v4/groups/" + groupId + "/variables");
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("key", key);
+        body.put("value", value);
+        body.put("masked", masked);
+        body.put("protected", isProtected);
+        body.put("variable_type", "env_var");
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(body, authHeaders());
+
+        try {
+            restTemplate.exchange(url, HttpMethod.POST, request, Map.class);
+            log.info("Group variable '{}' added to group {}", key, groupId);
+
+        } catch (HttpClientErrorException.Conflict e) {
+            log.warn("Group variable '{}' already exists, updating", key);
+            updateGroupVariable(key, value, masked, isProtected);
+
+        } catch (HttpClientErrorException e) {
+            log.error("Add group variable FAILED: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Обновить CI/CD переменную группы.
+     */
+    public void updateGroupVariable(String key, String value,
+                                     boolean masked, boolean isProtected) {
+        Long groupId = gitLabConfig.getGitlabGroupId();
+        String url = apiUrl("/api/v4/groups/" + groupId + "/variables/" + key);
+
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("value", value);
+        body.put("masked", masked);
+        body.put("protected", isProtected);
+
+        HttpEntity<Map<String, Object>> request =
+                new HttpEntity<>(body, authHeaders());
+
+        try {
+            restTemplate.exchange(url, HttpMethod.PUT, request, Map.class);
+            log.info("Group variable '{}' updated in group {}", key, groupId);
+        } catch (HttpClientErrorException e) {
+            log.error("Update group variable FAILED: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Получить все переменные группы.
+     */
+    public List<Map<String, Object>> getGroupVariables() {
+        Long groupId = gitLabConfig.getGitlabGroupId();
+        String url = apiUrl("/api/v4/groups/" + groupId + "/variables");
+        HttpEntity<?> request = new HttpEntity<>(authHeaders());
+
+        try {
+            ResponseEntity<List<Map<String, Object>>> response =
+                    restTemplate.exchange(url, HttpMethod.GET, request,
+                            new ParameterizedTypeReference<
+                                    List<Map<String, Object>>>() {});
+            return response.getBody();
+        } catch (HttpClientErrorException e) {
+            log.error("Get group variables FAILED: {}", e.getMessage());
+            return Collections.emptyList();
+        }
+    }
+
+    /**
+     * Удалить переменную группы.
+     */
+    public void deleteGroupVariable(String key) {
+        Long groupId = gitLabConfig.getGitlabGroupId();
+        String url = apiUrl("/api/v4/groups/" + groupId + "/variables/" + key);
+        HttpEntity<?> request = new HttpEntity<>(authHeaders());
+
+        try {
+            restTemplate.exchange(url, HttpMethod.DELETE, request, Void.class);
+            log.info("Group variable '{}' deleted from group {}", key, groupId);
+        } catch (HttpClientErrorException e) {
+            log.error("Delete group variable FAILED: {}", e.getMessage());
+        }
+    }
+
+    // =========================================================================
     //  URL HELPERS
     // =========================================================================
 
     /**
-     * http://localhost:8929/username
+     * Внешний URL профиля: http://gitlab.local:8929/username
      */
     public String getExternalProfileUrl(String username) {
         return gitLabConfig.getGitlabExternalUrl()
@@ -352,7 +527,7 @@ public class GitLabService {
     }
 
     /**
-     * http://localhost:8929/username/project-name
+     * Внешний URL проекта: http://gitlab.local:8929/group/project-path
      */
     public String getExternalProjectUrl(String pathWithNamespace) {
         return gitLabConfig.getGitlabExternalUrl()
@@ -360,7 +535,7 @@ public class GitLabService {
     }
 
     /**
-     * http://localhost:8929/username/project-name.git
+     * Внешний clone URL: http://gitlab.local:8929/group/project-path.git
      */
     public String getExternalCloneUrl(String pathWithNamespace) {
         return gitLabConfig.getGitlabExternalUrl()
@@ -541,7 +716,7 @@ public class GitLabService {
     }
 
     /**
-     * GitLab project path: [a-z0-9-]
+     * GitLab project path: [a-z0-9-], без зарезервированных слов
      */
     private String sanitizeProjectPath(String name) {
         return name.toLowerCase()

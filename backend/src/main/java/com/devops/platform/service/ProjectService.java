@@ -59,7 +59,6 @@ public class ProjectService {
         log.info("Creating project '{}' for user '{}'",
                 request.getName(), user.getRealUsername());
 
-        // ── Валидация ──
         if (projectRepository.existsByNameAndOwner(
                 request.getName(), user)) {
             throw new BadRequestException(
@@ -68,12 +67,9 @@ public class ProjectService {
 
         if (user.getGitlabUserId() == null) {
             throw new BadRequestException(
-                    "GitLab-аккаунт не привязан. "
-                    + "Перерегистрируйтесь или обратитесь "
-                    + "в поддержку.");
+                    "GitLab-аккаунт не привязан.");
         }
 
-        // ── 1. TechStack ──
         TechStack stack = TechStack.builder()
                 .backend(BackendTech.valueOf(
                         request.getStack().getBackend().toUpperCase()))
@@ -84,7 +80,6 @@ public class ProjectService {
                 .useDocker(request.getStack().getUseDocker())
                 .build();
 
-        // ── 2. Сохраняем проект в БД ──
         Project project = Project.builder()
                 .name(request.getName())
                 .description(request.getDescription())
@@ -95,15 +90,15 @@ public class ProjectService {
 
         project = projectRepository.save(project);
 
-        // ── 3. Создаём репозиторий в GitLab ──
         try {
+            // ══════ ИЗМЕНЕНО: создаём В ГРУППЕ ══════
             GitLabService.GitLabProjectInfo gitlabProject =
-                    gitLabService.createProject(
+                    gitLabService.createProjectInGroup(
                             request.getName(),
+                            user.getRealUsername(),
                             user.getGitlabUserId()
                     );
 
-            // Сохраняем GitLab-данные
             project.setGitlabProjectId(gitlabProject.getId());
             project.setGitlabUrl(
                     gitLabService.getExternalProjectUrl(
@@ -112,11 +107,6 @@ public class ProjectService {
                     gitLabService.getExternalCloneUrl(
                             gitlabProject.getPathWithNamespace()));
 
-            log.info("GitLab repo: id={}, url={}",
-                    gitlabProject.getId(),
-                    project.getGitlabUrl());
-
-            // ── 4. Пушим шаблон ──
             boolean useDocker =
                     Boolean.TRUE.equals(stack.getUseDocker());
 
@@ -130,9 +120,6 @@ public class ProjectService {
             );
 
             project.setStatus(ProjectStatus.ACTIVE);
-
-            log.info("Project '{}' created with GitLab repo OK",
-                    request.getName());
 
         } catch (Exception e) {
             log.error("GitLab FAILED for '{}': {}",

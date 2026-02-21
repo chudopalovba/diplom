@@ -11,26 +11,17 @@ import java.time.Duration;
 @Configuration
 public class GitLabConfig {
 
-    /**
-     * Внутренний URL GitLab (для API-вызовов из backend).
-     * В docker-сети: http://gitlab (порт 80)
-     * Локально: http://localhost:8929
-     */
     @Value("${gitlab.url}")
     private String gitlabUrl;
 
-    /**
-     * Внешний URL GitLab (для ссылок, которые увидит пользователь в браузере).
-     * Всегда: http://localhost:8929
-     */
     @Value("${gitlab.external-url}")
     private String gitlabExternalUrl;
 
-    /**
-     * Admin Personal Access Token (api + read_user + sudo).
-     */
     @Value("${gitlab.token}")
     private String gitlabToken;
+
+    @Value("${gitlab.group-id}")
+    private Long gitlabGroupId;
 
     @Bean(name = "gitlabRestTemplate")
     public RestTemplate gitlabRestTemplate(RestTemplateBuilder builder) {
@@ -50,5 +41,9 @@ public class GitLabConfig {
 
     public String getGitlabToken() {
         return gitlabToken;
+    }
+
+    public Long getGitlabGroupId() {
+        return gitlabGroupId;
     }
 }
