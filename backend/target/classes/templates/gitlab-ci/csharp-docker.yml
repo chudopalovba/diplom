@@ -1,0 +1,71 @@
+stages:
+  - build
+  - test
+  - docker
+  - deploy
+
+# ==========================================
+# Backend (C# .NET)
+# ==========================================
+
+backend-build:
+  stage: build
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script:
+    - cd backend
+    - dotnet restore
+    - dotnet build --no-restore -c Release
+  artifacts:
+    paths:
+      - backend/bin/Release
+
+backend-test:
+  stage: test
+  image: mcr.microsoft.com/dotnet/sdk:8.0
+  script:
+    - cd backend
+    - dotnet test --no-build -c Release
+
+# ==========================================
+# Frontend
+# ==========================================
+
+frontend-build:
+  stage: build
+  image: node:20-alpine
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/dist
+
+# ==========================================
+# Docker
+# ==========================================
+
+docker-build:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  script:
+    - docker build -t $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA ./backend
+    - docker build -t $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA ./frontend
+    - docker push $CI_REGISTRY_IMAGE/backend:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE/frontend:$CI_COMMIT_SHA
+  only:
+    - main
+
+# ==========================================
+# Deploy
+# ==========================================
+
+deploy:
+  stage: deploy
+  script:
+    - echo "Deploying..."
+  only:
+    - main
+  when: manual
