@@ -1,4 +1,4 @@
-package com.{{PACKAGE_NAME}}.controller;
+package com.example.{{project_name}}.controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -9,12 +9,12 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api")
 public class HelloController {
-    
+
     @GetMapping("/health")
     public Map<String, String> health() {
-        return Map.of("status", "UP", "service", "{{PROJECT_NAME}}");
+        return Map.of("status", "UP", "project", "{{PROJECT_NAME}}");
     }
-    
+
     @GetMapping("/hello")
     public Map<String, String> hello() {
         return Map.of("message", "Hello from {{PROJECT_NAME}}!");

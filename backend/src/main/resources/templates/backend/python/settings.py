@@ -7,24 +7,35 @@ DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 
 INSTALLED_APPS = [
+    'django.contrib.admin',
+    'django.contrib.auth',
     'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'corsheaders',
     'api',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
+    'django.middleware.csrf.CsrfViewMiddleware',
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
 ]
 
-ROOT_URLCONF = '{{PROJECT_NAME_UNDERSCORE}}.urls'
+ROOT_URLCONF = '{{project_name}}.urls'
+CORS_ALLOW_ALL_ORIGINS = True
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', '{{DB_NAME}}'),
-        'USER': os.environ.get('DB_USERNAME', 'postgres'),
+        'NAME': os.environ.get('DB_NAME', '{{project_name}}_db'),
+        'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),
         'PORT': os.environ.get('DB_PORT', '5432'),

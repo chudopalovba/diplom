@@ -3,7 +3,7 @@ from rest_framework.response import Response
 
 @api_view(['GET'])
 def health(request):
-    return Response({'status': 'UP', 'service': '{{PROJECT_NAME}}'})
+    return Response({'status': 'UP', 'project': '{{PROJECT_NAME}}'})
 
 @api_view(['GET'])
 def hello(request):

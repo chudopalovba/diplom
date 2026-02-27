@@ -601,7 +601,16 @@ public class GitLabService {
                         "backend/Dockerfile", projectName);
             }
             case "csharp" -> {
-                log.warn("C# templates not yet implemented");
+                String ns = projectName.toLowerCase()
+                    .replaceAll("[^a-z0-9]", "");
+
+                addFile(files, base + "project.csproj",
+                 "backend/{{project-name}}.csproj", projectName);
+                addFile(files, base + "Program.cs", "backend/Program.cs", projectName);
+                addFile(files, base + "HelloController.cs", "backend/Controllers/HelloController.cs", projectName);
+                addFile(files, base + "AppDbContext.cs", "backend/Data/AppDbContext.cs", projectName);
+                addFile(files, base + "appsettings.json", "backend/appsettings.json", projectName);
+                addFile(files, base + "Dockerfile", "backend/Dockerfile", projectName);
             }
             default -> log.warn("Unknown backend: {}", tech);
         }
