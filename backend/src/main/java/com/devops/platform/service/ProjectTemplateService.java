@@ -291,9 +291,27 @@ public class ProjectTemplateService {
             }
 
             // ── ANGULAR ─────────────────────────────────────────────
+            // ── ANGULAR ─────────────────────────────────────────────
             case ANGULAR -> {
-                log.warn("Angular templates not yet implemented, skipping frontend files");
-            }
+                addTemplate(files, "frontend/package.json",
+                        tp + "package.json", vars);
+                addTemplate(files, "frontend/angular.json",
+                        tp + "angular.json", vars);
+                addTemplate(files, "frontend/tsconfig.json",
+                        tp + "tsconfig.json", vars);
+                addTemplate(files, "frontend/tsconfig.app.json",
+                        tp + "tsconfig.app.json", vars);
+                addTemplate(files, "frontend/proxy.conf.json",
+                        tp + "proxy.conf.json", vars);
+                addTemplate(files, "frontend/src/index.html",
+                        tp + "src/index.html", vars);
+                addTemplate(files, "frontend/src/main.ts",
+                        tp + "src/main.ts", vars);
+                addTemplate(files, "frontend/src/styles.css",
+                        tp + "src/styles.css", vars);
+                addTemplate(files, "frontend/src/app/app.component.ts",
+                        tp + "src/app/app.component.ts", vars);
+}
         }
 
         // ── Общие файлы frontend (Docker) ───────────────────────────
