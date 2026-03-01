@@ -2,32 +2,32 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// ── Database ──
+var host     = Environment.GetEnvironmentVariable("DB_HOST")     ?? "localhost";
+var port     = Environment.GetEnvironmentVariable("DB_PORT")     ?? "5432";
+var dbName   = Environment.GetEnvironmentVariable("DB_NAME")     ?? "{{project_name}}_db";
+var dbUser   = Environment.GetEnvironmentVariable("DB_USER")     ?? "postgres";
+var dbPass   = Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "postgres";
+var connStr  = $"Host={host};Port={port};Database={dbName};Username={dbUser};Password={dbPass}";
+
+builder.Services.AddDbContext<AppDbContext>(opt => opt.UseNpgsql(connStr));
+
+// ── Controllers ──
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
 
-// PostgreSQL
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? $"Host={Environment.GetEnvironmentVariable("DB_HOST") ?? "localhost"};" +
-       $"Port={Environment.GetEnvironmentVariable("DB_PORT") ?? "5432"};" +
-       $"Database={Environment.GetEnvironmentVariable("DB_NAME") ?? "{{project_name}}_db"};" +
-       $"Username={Environment.GetEnvironmentVariable("DB_USER") ?? "postgres"};" +
-       $"Password={Environment.GetEnvironmentVariable("DB_PASSWORD") ?? "postgres"}";
-
-builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseNpgsql(connectionString));
+// ── CORS ──
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 
 var app = builder.Build();
 
+// Auto-create tables (dev convenience)
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.EnsureCreated();
+}
+
 app.UseCors();
 app.MapControllers();
-
 app.Run();

@@ -28,13 +28,14 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
 ]
 
-ROOT_URLCONF = '{{project_name}}.urls'
+ROOT_URLCONF = '{{project_name_py}}.urls'
+WSGI_APPLICATION = '{{project_name_py}}.wsgi.application'
 CORS_ALLOW_ALL_ORIGINS = True
 
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.environ.get('DB_NAME', '{{project_name}}_db'),
+        'NAME': os.environ.get('DB_NAME', '{{project_name_py}}_db'),
         'USER': os.environ.get('DB_USER', 'postgres'),
         'PASSWORD': os.environ.get('DB_PASSWORD', 'postgres'),
         'HOST': os.environ.get('DB_HOST', 'localhost'),

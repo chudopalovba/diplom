@@ -1,10 +1,9 @@
-from rest_framework.decorators import api_view
-from rest_framework.response import Response
+from django.http import JsonResponse
 
-@api_view(['GET'])
+
 def health(request):
-    return Response({'status': 'UP', 'project': '{{PROJECT_NAME}}'})
+    return JsonResponse({'status': 'UP', 'project': '{{PROJECT_NAME}}'})
 
-@api_view(['GET'])
+
 def hello(request):
-    return Response({'message': 'Hello from {{PROJECT_NAME}}!'})
+    return JsonResponse({'message': 'Hello from {{PROJECT_NAME}}!'})
