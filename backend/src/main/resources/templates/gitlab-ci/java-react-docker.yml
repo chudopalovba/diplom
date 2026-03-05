@@ -1,18 +1,25 @@
 stages:
   - build
   - test
-  - publish
+  - docker
   - deploy
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  DOCKER_REGISTRY: ${NEXUS_DOCKER_URL}
+  BACKEND_IMAGE: ${NEXUS_DOCKER_URL}/${CI_PROJECT_NAME}-backend
+  FRONTEND_IMAGE: ${NEXUS_DOCKER_URL}/${CI_PROJECT_NAME}-frontend
+  IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
 
 cache:
   paths:
     - .m2/repository/
     - frontend/node_modules/
 
-# ── Backend Build ──
+# ══════════════════════════════════════════════
+#  BUILD (compile artifacts for tests)
+# ══════════════════════════════════════════════
+
 build-backend:
   stage: build
   image: maven:3.9-eclipse-temurin-17-alpine
@@ -24,7 +31,6 @@ build-backend:
       - backend/target/*.jar
     expire_in: 1 hour
 
-# ── Frontend Build ──
 build-frontend:
   stage: build
   image: node:18-alpine
@@ -37,7 +43,10 @@ build-frontend:
       - frontend/dist/
     expire_in: 1 hour
 
-# ── Backend Tests ──
+# ══════════════════════════════════════════════
+#  TEST
+# ══════════════════════════════════════════════
+
 test-backend:
   stage: test
   image: maven:3.9-eclipse-temurin-17-alpine
@@ -46,54 +55,64 @@ test-backend:
     - mvn test
   allow_failure: true
 
-# ── Publish to Nexus ──
-publish-artifacts:
-  stage: publish
-  image: curlimages/curl:latest
+# ══════════════════════════════════════════════
+#  DOCKER BUILD & PUSH TO NEXUS REGISTRY
+# ══════════════════════════════════════════════
+
+docker-build-push:
+  stage: docker
+  image: docker:24
+  services:
+    - name: docker:24-dind
+      variables:
+        DOCKER_TLS_CERTDIR: ""
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  before_script:
+    - echo "${NEXUS_PASSWORD}" | docker login -u "${NEXUS_USER}" --password-stdin ${DOCKER_REGISTRY}
   script:
-    # Upload JAR to Nexus
-    - |
-      curl -v -u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-        --upload-file backend/target/*.jar \
-        "${NEXUS_URL}/repository/maven-releases/com/example/${CI_PROJECT_NAME}/$(date +%Y%m%d%H%M%S)/${CI_PROJECT_NAME}.jar"
-    # Upload docker-compose
-    - |
-      curl -v -u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-        --upload-file docker-compose.yml \
-        "${NEXUS_URL}/repository/raw-hosted/${CI_PROJECT_NAME}/docker-compose.yml"
-    # Upload Dockerfiles
-    - |
-      curl -v -u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-        --upload-file backend/Dockerfile \
-        "${NEXUS_URL}/repository/raw-hosted/${CI_PROJECT_NAME}/backend/Dockerfile"
-    - |
-      curl -v -u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-        --upload-file frontend/Dockerfile \
-        "${NEXUS_URL}/repository/raw-hosted/${CI_PROJECT_NAME}/frontend/Dockerfile"
-  dependencies:
-    - build-backend
+    # Backend image
+    - docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest ./backend
+    - docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
+    - docker push ${BACKEND_IMAGE}:latest
+    # Frontend image
+    - docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} -t ${FRONTEND_IMAGE}:latest ./frontend
+    - docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
+    - docker push ${FRONTEND_IMAGE}:latest
   only:
     - main
 
-# ── Deploy ──
+# ══════════════════════════════════════════════
+#  DEPLOY — pull images & docker compose up
+# ══════════════════════════════════════════════
+
 deploy:
   stage: deploy
   image: alpine:latest
   before_script:
-    - apk add --no-cache ansible openssh-client
+    - apk add --no-cache openssh-client
     - mkdir -p ~/.ssh
     - echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_rsa
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
   script:
+    # Копируем prod docker-compose на сервер
+    - scp -i ~/.ssh/id_rsa docker-compose.prod.yml ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/${CI_PROJECT_NAME}/docker-compose.yml
+    - scp -i ~/.ssh/id_rsa database/init.sql ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/${CI_PROJECT_NAME}/init.sql 2>/dev/null || true
+    # SSH: login, pull, up
     - |
-      ansible-playbook -i "${DEPLOY_HOST}," \
-        -u "${DEPLOY_USER}" \
-        --private-key ~/.ssh/id_rsa \
-        ansible/deploy-java-react-docker.yml \
-        -e "project_name=${CI_PROJECT_NAME}" \
-        -e "nexus_url=${NEXUS_URL}" \
-        -e "db_name=${CI_PROJECT_NAME}_db"
+      ssh -i ~/.ssh/id_rsa ${DEPLOY_USER}@${DEPLOY_HOST} "
+        cd /opt/${CI_PROJECT_NAME} &&
+        export DOCKER_REGISTRY=${DOCKER_REGISTRY} &&
+        export PROJECT_NAME=${CI_PROJECT_NAME} &&
+        export IMAGE_TAG=${IMAGE_TAG} &&
+        export DB_USER=${DB_USER:-postgres} &&
+        export DB_PASSWORD=${DB_PASSWORD:-postgres} &&
+        echo '${NEXUS_PASSWORD}' | docker login -u '${NEXUS_USER}' --password-stdin ${DOCKER_REGISTRY} &&
+        docker compose pull &&
+        docker compose up -d --remove-orphans
+      "
   environment:
     name: production
     url: http://${DEPLOY_HOST}:3000
