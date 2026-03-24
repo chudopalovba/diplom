@@ -1,0 +1,6 @@
+---
+- name: Deploy csharp + angular application (no-docker)
+  hosts: app
+  become: yes
+  roles:
+    - deploy

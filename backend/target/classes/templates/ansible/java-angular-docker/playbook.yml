@@ -1,0 +1,6 @@
+---
+- name: Deploy java + angular application (docker)
+  hosts: app
+  become: yes
+  roles:
+    - deploy

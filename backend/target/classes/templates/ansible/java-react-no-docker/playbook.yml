@@ -1,0 +1,6 @@
+---
+- name: Deploy java + react application (no-docker)
+  hosts: app
+  become: yes
+  roles:
+    - deploy

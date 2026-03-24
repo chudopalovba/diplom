@@ -1,0 +1,6 @@
+---
+- name: Deploy csharp + react application (docker)
+  hosts: app
+  become: yes
+  roles:
+    - deploy
