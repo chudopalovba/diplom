@@ -1,0 +1,30 @@
+# Java
+target/
+*.class
+*.jar
+.idea/
+*.iml
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+db.sqlite3
+
+# Node
+node_modules/
+dist/
+.vite/
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
