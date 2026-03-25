@@ -1,20 +1,20 @@
 stages:
   - build
   - test
-  - publish
+  - sonar
+  - push
   - deploy
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-
-cache:
-  paths:
-    - .m2/repository/
-    - frontend/node_modules/
+  NEXUS_URL: "http://localhost:8081"
+  NEXUS_REPO_RAW: "java-raw"
 
 build-backend:
   stage: build
-  image: maven:3.9-eclipse-temurin-17-alpine
+  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  tags:
+    - java
   script:
     - cd backend
     - mvn clean package -DskipTests
@@ -25,58 +25,114 @@ build-backend:
 
 build-frontend:
   stage: build
-  image: node:18-alpine
+  image: localhost:5000/node:20-alpine
+  tags:
+    - node
   script:
     - cd frontend
     - npm ci
     - npm run build
   artifacts:
     paths:
-      - frontend/dist/
+      - frontend/build/
     expire_in: 1 hour
 
 test-backend:
   stage: test
-  image: maven:3.9-eclipse-temurin-17-alpine
+  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  tags:
+    - java
   script:
     - cd backend
-    - mvn test
+    - mvn test || true
+  artifacts:
+    reports:
+      junit:
+        - backend/target/surefire-reports/TEST-*.xml
+    when: always
+
+test-frontend:
+  stage: test
+  image: localhost:5000/node:20-alpine
+  tags:
+    - node
+  script:
+    - cd frontend
+    - npm ci
+    - npm run test -- --watchAll=false || true
   allow_failure: true
 
-publish-artifacts:
-  stage: publish
-  image: curlimages/curl:latest
+sonar-scan:
+  stage: sonar
+  image: localhost:5000/sonar-scanner-cli:12.0.0.3214_8.0.1
+  tags:
+    - sonar
   script:
-    - |
-      curl -v -u "${NEXUS_USER}:${NEXUS_PASSWORD}" \
-        --upload-file backend/target/*.jar \
-        "${NEXUS_URL}/repository/maven-releases/com/example/${CI_PROJECT_NAME}/$(date +%Y%m%d%H%M%S)/${CI_PROJECT_NAME}.jar"
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=${CI_PROJECT_NAME}
+      -Dsonar.sources=backend/src
+      -Dsonar.java.binaries=backend/target/classes
+      -Dsonar.host.url=${SONAR_HOST_URL}
+      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.qualitygate.wait=false
   dependencies:
     - build-backend
-  only:
-    - main
 
-deploy:
-  stage: deploy
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache ansible openssh-client
-    - mkdir -p ~/.ssh
-    - echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_rsa
-    - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
+push-artifacts-back:
+  stage: push
+  image: localhost:5000/curlimages/curl:latest
+  tags:
+    - java
   script:
-    - |
-      ansible-playbook -i "${DEPLOY_HOST}," \
-        -u "${DEPLOY_USER}" \
-        --private-key ~/.ssh/id_rsa \
-        ansible/deploy-java-react-no-docker.yml \
-        -e "project_name=${CI_PROJECT_NAME}" \
-        -e "jar_path=backend/target/*.jar" \
-        -e "frontend_dist=frontend/dist/" \
-        -e "db_name=${CI_PROJECT_NAME}_db"
-  environment:
-    name: production
-  only:
-    - main
+    - JAR_FILE=$(ls backend/target/*.jar | head -1)
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file "${JAR_FILE}"
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/backend/$(basename ${JAR_FILE})"
+  dependencies:
+    - build-backend
+
+push-artifacts-front:
+  stage: push
+  image: localhost:5000/curlimages/curl:latest
+  tags:
+    - node
+  script:
+    - tar -czf frontend.tar.gz -C frontend/build .
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file frontend.tar.gz
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/frontend/frontend.tar.gz"
+  dependencies:
+    - build-frontend
+
+deploy-proj:
+  stage: deploy
+  image: localhost:5000/cytopia/ansible:2.13
+  tags:
+    - ansible
   when: manual
+  before_script:
+    - mkdir -p ~/.ssh
+    - echo "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H ${DEPLOY_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - cd ansible
+    - >
+      ansible-playbook -i inventory playbook.yml
+      -e "nexus_url=${NEXUS_URL}"
+      -e "nexus_repo=${NEXUS_REPO_RAW}"
+      -e "nexus_user=${NEXUS_USER}"
+      -e "nexus_password=${NEXUS_PASSWORD}"
+      -e "project_name=${CI_PROJECT_NAME}"
+      -e "pipeline_id=${CI_PIPELINE_ID}"
+      -e "db_host=${DB_HOST}"
+      -e "db_port=${DB_PORT}"
+      -e "db_name=${DB_NAME}"
+      -e "db_user=${DB_USER}"
+      -e "db_password=${DB_PASSWORD}"
+      -e "backend_type=java"
+      -e "frontend_type=react"
+      -e "use_docker=false"

@@ -7,24 +7,22 @@ stages:
 
 variables:
   NEXUS_URL: "http://localhost:8081"
-  NEXUS_REPO_RAW: "python-raw"
-
-# ======================== BUILD ========================
+  NEXUS_REPO_RAW: "csharp-row"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
 
 build-backend:
   stage: build
-  image: localhost:5000/python:3.11-slim
+  image: localhost:5000/dotnet/sdk:8.0
   tags:
-    - python
+    - dotnet
   script:
     - cd backend
-    - pip install --upgrade pip
-    - pip install -r requirements.txt
-    - python manage.py collectstatic --noinput || true
-    - python manage.py check
+    - dotnet restore
+    - dotnet publish -c Release -o publish
   artifacts:
     paths:
-      - backend/
+      - backend/publish/
     expire_in: 1 hour
 
 build-frontend:
@@ -38,20 +36,17 @@ build-frontend:
     - npm run build
   artifacts:
     paths:
-      - frontend/build/
+      - frontend/dist/
     expire_in: 1 hour
-
-# ======================== TEST ========================
 
 test-backend:
   stage: test
-  image: localhost:5000/python:3.11-slim
+  image: localhost:5000/dotnet/sdk:8.0
   tags:
-    - python
+    - dotnet
   script:
     - cd backend
-    - pip install -r requirements.txt
-    - python manage.py test || true
+    - dotnet test || true
   allow_failure: true
 
 test-frontend:
@@ -62,10 +57,8 @@ test-frontend:
   script:
     - cd frontend
     - npm ci
-    - npm run test -- --watchAll=false || true
+    - npm run test -- --watch=false --browsers=ChromeHeadless || true
   allow_failure: true
-
-# ======================== SONAR ========================
 
 sonar-scan:
   stage: sonar
@@ -79,18 +72,17 @@ sonar-scan:
       -Dsonar.sources=backend
       -Dsonar.host.url=${SONAR_HOST_URL}
       -Dsonar.login=${SONAR_TOKEN}
-      -Dsonar.python.version=3.11
       -Dsonar.qualitygate.wait=false
-
-# ======================== PUSH ========================
+  dependencies:
+    - build-backend
 
 push-artifacts-back:
   stage: push
   image: localhost:5000/curlimages/curl:latest
   tags:
-    - python
+    - dotnet
   script:
-    - tar -czf backend.tar.gz -C backend .
+    - tar -czf backend.tar.gz -C backend/publish .
     - >
       curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
       --upload-file backend.tar.gz
@@ -104,15 +96,13 @@ push-artifacts-front:
   tags:
     - node
   script:
-    - tar -czf frontend.tar.gz -C frontend/build .
+    - tar -czf frontend.tar.gz -C frontend/dist .
     - >
       curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
       --upload-file frontend.tar.gz
       "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/frontend/frontend.tar.gz"
   dependencies:
     - build-frontend
-
-# ======================== DEPLOY ========================
 
 deploy-proj:
   stage: deploy
@@ -140,6 +130,6 @@ deploy-proj:
       -e "db_name=${DB_NAME}"
       -e "db_user=${DB_USER}"
       -e "db_password=${DB_PASSWORD}"
-      -e "backend_type=python"
-      -e "frontend_type=react"
+      -e "backend_type=csharp"
+      -e "frontend_type=angular"
       -e "use_docker=false"

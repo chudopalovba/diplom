@@ -1,121 +1,143 @@
 stages:
   - build
   - test
-  - docker
+  - sonar
+  - push
   - deploy
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-  DOCKER_REGISTRY: ${NEXUS_DOCKER_URL}
-  BACKEND_IMAGE: ${NEXUS_DOCKER_URL}/${CI_PROJECT_NAME}-backend
-  FRONTEND_IMAGE: ${NEXUS_DOCKER_URL}/${CI_PROJECT_NAME}-frontend
-  IMAGE_TAG: ${CI_COMMIT_SHORT_SHA}
-
-cache:
-  paths:
-    - .m2/repository/
-    - frontend/node_modules/
-
-# ══════════════════════════════════════════════
-#  BUILD (compile artifacts for tests)
-# ══════════════════════════════════════════════
+  NEXUS_URL: "http://localhost:8081"
+  NEXUS_REPO_RAW: "configs-hosted"
+  DOCKER_REGISTRY: "localhost:5051"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+  BACKEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/backend:${CI_PIPELINE_ID}"
+  FRONTEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/frontend:${CI_PIPELINE_ID}"
+  DB_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/db:${CI_PIPELINE_ID}"
 
 build-backend:
   stage: build
-  image: maven:3.9-eclipse-temurin-17-alpine
+  image: localhost:5000/docker:24
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
   script:
-    - cd backend
-    - mvn clean package -DskipTests
-  artifacts:
-    paths:
-      - backend/target/*.jar
-    expire_in: 1 hour
+    - docker build -t ${BACKEND_IMAGE} ./backend
 
 build-frontend:
   stage: build
-  image: node:18-alpine
+  image: localhost:5000/docker:24
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
   script:
-    - cd frontend
-    - npm ci
-    - npm run build
-  artifacts:
-    paths:
-      - frontend/dist/
-    expire_in: 1 hour
-
-# ══════════════════════════════════════════════
-#  TEST
-# ══════════════════════════════════════════════
+    - docker build -t ${FRONTEND_IMAGE} ./frontend
 
 test-backend:
   stage: test
-  image: maven:3.9-eclipse-temurin-17-alpine
+  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  tags:
+    - java
   script:
     - cd backend
-    - mvn test
+    - mvn test || true
+  artifacts:
+    reports:
+      junit:
+        - backend/target/surefire-reports/TEST-*.xml
+    when: always
+
+test-frontend:
+  stage: test
+  image: localhost:5000/node:20-alpine
+  tags:
+    - node
+  script:
+    - cd frontend
+    - npm ci
+    - npm run test -- --watchAll=false || true
   allow_failure: true
 
-# ══════════════════════════════════════════════
-#  DOCKER BUILD & PUSH TO NEXUS REGISTRY
-# ══════════════════════════════════════════════
+sonar-scan:
+  stage: sonar
+  image: localhost:5000/sonar-scanner-cli:12.0.0.3214_8.0.1
+  tags:
+    - sonar
+  script:
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=${CI_PROJECT_NAME}
+      -Dsonar.sources=backend/src
+      -Dsonar.host.url=${SONAR_HOST_URL}
+      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.qualitygate.wait=false
 
-docker-build-push:
-  stage: docker
-  image: docker:24
+push-artifacts-back:
+  stage: push
+  image: localhost:5000/docker:24
+  tags:
+    - docker
   services:
-    - name: docker:24-dind
-      variables:
-        DOCKER_TLS_CERTDIR: ""
-  variables:
-    DOCKER_HOST: tcp://docker:2375
-    DOCKER_TLS_CERTDIR: ""
-  before_script:
-    - echo "${NEXUS_PASSWORD}" | docker login -u "${NEXUS_USER}" --password-stdin ${DOCKER_REGISTRY}
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
   script:
-    # Backend image
-    - docker build -t ${BACKEND_IMAGE}:${IMAGE_TAG} -t ${BACKEND_IMAGE}:latest ./backend
-    - docker push ${BACKEND_IMAGE}:${IMAGE_TAG}
-    - docker push ${BACKEND_IMAGE}:latest
-    # Frontend image
-    - docker build -t ${FRONTEND_IMAGE}:${IMAGE_TAG} -t ${FRONTEND_IMAGE}:latest ./frontend
-    - docker push ${FRONTEND_IMAGE}:${IMAGE_TAG}
-    - docker push ${FRONTEND_IMAGE}:latest
-  only:
-    - main
+    - docker build -t ${BACKEND_IMAGE} ./backend
+    - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
+    - docker push ${BACKEND_IMAGE}
+    - docker build -t ${DB_IMAGE} ./db
+    - docker push ${DB_IMAGE}
 
-# ══════════════════════════════════════════════
-#  DEPLOY — pull images & docker compose up
-# ══════════════════════════════════════════════
+push-artifacts-front:
+  stage: push
+  image: localhost:5000/docker:24
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
+  script:
+    - docker build -t ${FRONTEND_IMAGE} ./frontend
+    - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
+    - docker push ${FRONTEND_IMAGE}
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file docker-compose.yml
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
 
-deploy:
+deploy-proj:
   stage: deploy
-  image: alpine:latest
-  before_script:
-    - apk add --no-cache openssh-client
-    - mkdir -p ~/.ssh
-    - echo "$DEPLOY_SSH_KEY" > ~/.ssh/id_rsa
-    - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null || true
-  script:
-    # Копируем prod docker-compose на сервер
-    - scp -i ~/.ssh/id_rsa docker-compose.prod.yml ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/${CI_PROJECT_NAME}/docker-compose.yml
-    - scp -i ~/.ssh/id_rsa database/init.sql ${DEPLOY_USER}@${DEPLOY_HOST}:/opt/${CI_PROJECT_NAME}/init.sql 2>/dev/null || true
-    # SSH: login, pull, up
-    - |
-      ssh -i ~/.ssh/id_rsa ${DEPLOY_USER}@${DEPLOY_HOST} "
-        cd /opt/${CI_PROJECT_NAME} &&
-        export DOCKER_REGISTRY=${DOCKER_REGISTRY} &&
-        export PROJECT_NAME=${CI_PROJECT_NAME} &&
-        export IMAGE_TAG=${IMAGE_TAG} &&
-        export DB_USER=${DB_USER:-postgres} &&
-        export DB_PASSWORD=${DB_PASSWORD:-postgres} &&
-        echo '${NEXUS_PASSWORD}' | docker login -u '${NEXUS_USER}' --password-stdin ${DOCKER_REGISTRY} &&
-        docker compose pull &&
-        docker compose up -d --remove-orphans
-      "
-  environment:
-    name: production
-    url: http://${DEPLOY_HOST}:3000
-  only:
-    - main
+  image: localhost:5000/cytopia/ansible:2.13
+  tags:
+    - ansible
   when: manual
+  before_script:
+    - mkdir -p ~/.ssh
+    - echo "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H ${DEPLOY_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - cd ansible
+    - >
+      ansible-playbook -i inventory playbook.yml
+      -e "nexus_url=${NEXUS_URL}"
+      -e "nexus_repo=${NEXUS_REPO_RAW}"
+      -e "nexus_user=${NEXUS_USER}"
+      -e "nexus_password=${NEXUS_PASSWORD}"
+      -e "docker_registry=${DOCKER_REGISTRY}"
+      -e "project_name=${CI_PROJECT_NAME}"
+      -e "pipeline_id=${CI_PIPELINE_ID}"
+      -e "db_name=${DB_NAME}"
+      -e "db_user=${DB_USER}"
+      -e "db_password=${DB_PASSWORD}"
+      -e "backend_type=java"
+      -e "frontend_type=react"
+      -e "use_docker=true"

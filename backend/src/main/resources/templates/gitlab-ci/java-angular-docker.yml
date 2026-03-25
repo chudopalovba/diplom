@@ -1,0 +1,151 @@
+stages:
+  - build
+  - test
+  - sonar
+  - push
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
+  NEXUS_URL: "http://localhost:8081"
+  NEXUS_REPO_RAW: "configs-hosted"
+  DOCKER_REGISTRY: "localhost:5051"
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_HOST: "tcp://docker:2375"
+  BACKEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/backend:${CI_PIPELINE_ID}"
+  FRONTEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/frontend:${CI_PIPELINE_ID}"
+  DB_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/db:${CI_PIPELINE_ID}"
+
+build-backend:
+  stage: build
+  image: localhost:5000/docker:24-dind
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
+  script:
+    - docker build -t ${BACKEND_IMAGE} ./backend
+  artifacts:
+    paths:
+      - backend/
+    expire_in: 1 hour
+
+build-frontend:
+  stage: build
+  image: localhost:5000/docker:24-dind
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
+  script:
+    - docker build -t ${FRONTEND_IMAGE} ./frontend
+  artifacts:
+    paths:
+      - frontend/
+    expire_in: 1 hour
+
+test-backend:
+  stage: test
+  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  tags:
+    - java
+  script:
+    - cd backend
+    - mvn test || true
+  artifacts:
+    reports:
+      junit:
+        - backend/target/surefire-reports/TEST-*.xml
+    when: always
+
+test-frontend:
+  stage: test
+  image: localhost:5000/node:20-alpine
+  tags:
+    - node
+  script:
+    - cd frontend
+    - npm ci
+    - npm run test -- --watch=false --browsers=ChromeHeadless || true
+  allow_failure: true
+
+sonar-scan:
+  stage: sonar
+  image: localhost:5000/sonar-scanner-cli:12.0.0.3214_8.0.1
+  tags:
+    - sonar
+  script:
+    - >
+      sonar-scanner
+      -Dsonar.projectKey=${CI_PROJECT_NAME}
+      -Dsonar.sources=backend/src
+      -Dsonar.host.url=${SONAR_HOST_URL}
+      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.qualitygate.wait=false
+
+push-artifacts-back:
+  stage: push
+  image: localhost:5000/docker:24
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
+  script:
+    - docker build -t ${BACKEND_IMAGE} ./backend
+    - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
+    - docker push ${BACKEND_IMAGE}
+    - docker build -t ${DB_IMAGE} ./db
+    - docker push ${DB_IMAGE}
+
+push-artifacts-front:
+  stage: push
+  image: localhost:5000/docker:24
+  tags:
+    - docker
+  services:
+    - name: localhost:5000/docker:24-dind
+      alias: docker
+      command: ["--insecure-registry=localhost:5051"]
+  script:
+    - docker build -t ${FRONTEND_IMAGE} ./frontend
+    - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
+    - docker push ${FRONTEND_IMAGE}
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file docker-compose.yml
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
+
+deploy-proj:
+  stage: deploy
+  image: localhost:5000/cytopia/ansible:2.13
+  tags:
+    - ansible
+  when: manual
+  before_script:
+    - mkdir -p ~/.ssh
+    - echo "${SSH_PRIVATE_KEY}" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -H ${DEPLOY_HOST} >> ~/.ssh/known_hosts 2>/dev/null || true
+  script:
+    - cd ansible
+    - >
+      ansible-playbook -i inventory playbook.yml
+      -e "nexus_url=${NEXUS_URL}"
+      -e "nexus_repo=${NEXUS_REPO_RAW}"
+      -e "nexus_user=${NEXUS_USER}"
+      -e "nexus_password=${NEXUS_PASSWORD}"
+      -e "docker_registry=${DOCKER_REGISTRY}"
+      -e "project_name=${CI_PROJECT_NAME}"
+      -e "pipeline_id=${CI_PIPELINE_ID}"
+      -e "db_name=${DB_NAME}"
+      -e "db_user=${DB_USER}"
+      -e "db_password=${DB_PASSWORD}"
+      -e "backend_type=java"
+      -e "frontend_type=angular"
+      -e "use_docker=true"
