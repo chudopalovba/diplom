@@ -10,7 +10,7 @@ variables:
 
 build-backend:
   stage: build
-  image: localhost:5000/python:3.11-slim
+  image: localhost:5000/python:3.11
   tags:
     - python
   script:
@@ -41,7 +41,7 @@ build-frontend:
 
 test-backend:
   stage: test
-  image: localhost:5000/python:3.11-slim
+  image: localhost:5000/python:3.11
   tags:
     - python
   script:
