@@ -6,7 +6,6 @@ stages:
   - deploy
 
 variables:
-  NEXUS_URL: "http://localhost:8081"
   NEXUS_REPO_RAW: "python-raw"
 
 build-backend:
@@ -23,6 +22,7 @@ build-backend:
   artifacts:
     paths:
       - backend/
+      - database/
     expire_in: 1 hour
 
 build-frontend:
@@ -32,7 +32,7 @@ build-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run build
   artifacts:
     paths:
@@ -57,8 +57,8 @@ test-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
-    - npm run test -- --watch=false --browsers=ChromeHeadless || true
+    - npm install
+    - npm run test -- --no-watch || true
   allow_failure: true
 
 sonar-scan:
@@ -71,8 +71,9 @@ sonar-scan:
       sonar-scanner
       -Dsonar.projectKey=${CI_PROJECT_NAME}
       -Dsonar.sources=backend
+      -Dsonar.exclusions=backend/staticfiles/**,backend/**/__pycache__/**
       -Dsonar.host.url=${SONAR_HOST_URL}
-      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.python.version=3.11
       -Dsonar.qualitygate.wait=false
 
@@ -87,6 +88,11 @@ push-artifacts-back:
       curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
       --upload-file backend.tar.gz
       "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/backend/backend.tar.gz"
+    - tar -czf database.tar.gz -C database .
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file database.tar.gz
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/database/database.tar.gz"
   dependencies:
     - build-backend
 

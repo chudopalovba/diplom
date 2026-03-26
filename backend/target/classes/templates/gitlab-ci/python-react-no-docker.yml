@@ -6,10 +6,7 @@ stages:
   - deploy
 
 variables:
-  NEXUS_URL: "http://localhost:8081"
   NEXUS_REPO_RAW: "python-raw"
-
-# ======================== BUILD ========================
 
 build-backend:
   stage: build
@@ -25,6 +22,7 @@ build-backend:
   artifacts:
     paths:
       - backend/
+      - database/
     expire_in: 1 hour
 
 build-frontend:
@@ -34,14 +32,12 @@ build-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run build
   artifacts:
     paths:
       - frontend/build/
     expire_in: 1 hour
-
-# ======================== TEST ========================
 
 test-backend:
   stage: test
@@ -61,11 +57,9 @@ test-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run test -- --watchAll=false || true
   allow_failure: true
-
-# ======================== SONAR ========================
 
 sonar-scan:
   stage: sonar
@@ -77,12 +71,11 @@ sonar-scan:
       sonar-scanner
       -Dsonar.projectKey=${CI_PROJECT_NAME}
       -Dsonar.sources=backend
+      -Dsonar.exclusions=backend/staticfiles/**,backend/**/__pycache__/**
       -Dsonar.host.url=${SONAR_HOST_URL}
-      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.python.version=3.11
       -Dsonar.qualitygate.wait=false
-
-# ======================== PUSH ========================
 
 push-artifacts-back:
   stage: push
@@ -95,6 +88,11 @@ push-artifacts-back:
       curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
       --upload-file backend.tar.gz
       "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/backend/backend.tar.gz"
+    - tar -czf database.tar.gz -C database .
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file database.tar.gz
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/database/database.tar.gz"
   dependencies:
     - build-backend
 
@@ -111,8 +109,6 @@ push-artifacts-front:
       "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/frontend/frontend.tar.gz"
   dependencies:
     - build-frontend
-
-# ======================== DEPLOY ========================
 
 deploy-proj:
   stage: deploy

@@ -7,12 +7,11 @@ stages:
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-  NEXUS_URL: "http://localhost:8081"
   NEXUS_REPO_RAW: "java-raw"
 
 build-backend:
   stage: build
-  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  image: localhost:5000/maven:3.9.6-eclipse-temurin-17
   tags:
     - java
   script:
@@ -21,6 +20,8 @@ build-backend:
   artifacts:
     paths:
       - backend/target/*.jar
+      - backend/target/classes/
+      - database/
     expire_in: 1 hour
 
 build-frontend:
@@ -30,7 +31,7 @@ build-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run build
   artifacts:
     paths:
@@ -45,11 +46,7 @@ test-backend:
   script:
     - cd backend
     - mvn test || true
-  artifacts:
-    reports:
-      junit:
-        - backend/target/surefire-reports/TEST-*.xml
-    when: always
+  allow_failure: true
 
 test-frontend:
   stage: test
@@ -58,7 +55,7 @@ test-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run test -- --watchAll=false || true
   allow_failure: true
 
@@ -74,7 +71,7 @@ sonar-scan:
       -Dsonar.sources=backend/src
       -Dsonar.java.binaries=backend/target/classes
       -Dsonar.host.url=${SONAR_HOST_URL}
-      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.qualitygate.wait=false
   dependencies:
     - build-backend
@@ -90,6 +87,11 @@ push-artifacts-back:
       curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
       --upload-file "${JAR_FILE}"
       "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/backend/$(basename ${JAR_FILE})"
+    - tar -czf database.tar.gz -C database .
+    - >
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
+      --upload-file database.tar.gz
+      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/database/database.tar.gz"
   dependencies:
     - build-backend
 
