@@ -7,9 +7,8 @@ stages:
 
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
-  NEXUS_URL: "http://localhost:8081"
   NEXUS_REPO_RAW: "configs-hosted"
-  DOCKER_REGISTRY: "localhost:5051"
+  DOCKER_REGISTRY: "172.17.0.1:5051"
   DOCKER_TLS_CERTDIR: ""
   DOCKER_HOST: "tcp://docker:2375"
   BACKEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/backend:${CI_PIPELINE_ID}"
@@ -24,7 +23,7 @@ build-backend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=172.17.0.1:5051"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
 
@@ -36,7 +35,7 @@ build-frontend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=172.17.0.1:5051"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
 
@@ -48,11 +47,7 @@ test-backend:
   script:
     - cd backend
     - mvn test || true
-  artifacts:
-    reports:
-      junit:
-        - backend/target/surefire-reports/TEST-*.xml
-    when: always
+  allow_failure: true
 
 test-frontend:
   stage: test
@@ -61,7 +56,7 @@ test-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
+    - npm install
     - npm run test -- --watchAll=false || true
   allow_failure: true
 
@@ -76,7 +71,7 @@ sonar-scan:
       -Dsonar.projectKey=${CI_PROJECT_NAME}
       -Dsonar.sources=backend/src
       -Dsonar.host.url=${SONAR_HOST_URL}
-      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.qualitygate.wait=false
 
 push-artifacts-back:
@@ -87,12 +82,12 @@ push-artifacts-back:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=172.17.0.1:5051"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
     - docker push ${BACKEND_IMAGE}
-    - docker build -t ${DB_IMAGE} ./db
+    - docker build -t ${DB_IMAGE} ./database
     - docker push ${DB_IMAGE}
 
 push-artifacts-front:
@@ -103,15 +98,16 @@ push-artifacts-front:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=172.17.0.1:5051"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
     - docker push ${FRONTEND_IMAGE}
-    - >
-      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
-      --upload-file docker-compose.yml
-      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
+    - |
+      apk add --no-cache curl
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+        --upload-file docker-compose.yml \
+        "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
 
 deploy-proj:
   stage: deploy
