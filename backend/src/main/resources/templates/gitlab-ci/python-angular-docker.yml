@@ -6,9 +6,8 @@ stages:
   - deploy
 
 variables:
-  NEXUS_URL: "http://localhost:8081"
   NEXUS_REPO_RAW: "configs-hosted"
-  DOCKER_REGISTRY: "localhost:5051"
+  DOCKER_REGISTRY: "192.168.0.102:5001"
   DOCKER_TLS_CERTDIR: ""
   DOCKER_HOST: "tcp://docker:2375"
   BACKEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/backend:${CI_PIPELINE_ID}"
@@ -23,7 +22,7 @@ build-backend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
 
@@ -35,13 +34,13 @@ build-frontend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
 
 test-backend:
   stage: test
-  image: localhost:5000/python:3.11
+  image: localhost:5000/python:3.11-slim
   tags:
     - python
   script:
@@ -57,8 +56,8 @@ test-frontend:
     - node
   script:
     - cd frontend
-    - npm ci
-    - npm run test -- --watch=false --browsers=ChromeHeadless || true
+    - npm install
+    - npm run test -- --no-watch || true
   allow_failure: true
 
 sonar-scan:
@@ -71,8 +70,9 @@ sonar-scan:
       sonar-scanner
       -Dsonar.projectKey=${CI_PROJECT_NAME}
       -Dsonar.sources=backend
+      -Dsonar.exclusions=backend/staticfiles/**,backend/**/__pycache__/**
       -Dsonar.host.url=${SONAR_HOST_URL}
-      -Dsonar.login=${SONAR_TOKEN}
+      -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.python.version=3.11
       -Dsonar.qualitygate.wait=false
 
@@ -84,12 +84,12 @@ push-artifacts-back:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
     - docker push ${BACKEND_IMAGE}
-    - docker build -t ${DB_IMAGE} ./db
+    - docker build -t ${DB_IMAGE} ./database
     - docker push ${DB_IMAGE}
 
 push-artifacts-front:
@@ -100,15 +100,16 @@ push-artifacts-front:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=localhost:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
     - docker push ${FRONTEND_IMAGE}
-    - >
-      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}"
-      --upload-file docker-compose.yml
-      "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
+    - |
+      apk add --no-cache curl
+      curl -v --user "${NEXUS_USER}:${NEXUS_PASSWORD}" \
+        --upload-file docker-compose.yml \
+        "${NEXUS_URL}/repository/${NEXUS_REPO_RAW}/${CI_PROJECT_NAME}/${CI_PIPELINE_ID}/docker-compose.yml"
 
 deploy-proj:
   stage: deploy

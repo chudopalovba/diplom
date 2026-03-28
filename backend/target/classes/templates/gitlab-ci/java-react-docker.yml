@@ -8,12 +8,26 @@ stages:
 variables:
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
   NEXUS_REPO_RAW: "configs-hosted"
-  DOCKER_REGISTRY: "172.17.0.1:5051"
+  DOCKER_REGISTRY: "192.168.0.102:5001"
   DOCKER_TLS_CERTDIR: ""
   DOCKER_HOST: "tcp://docker:2375"
   BACKEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/backend:${CI_PIPELINE_ID}"
   FRONTEND_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/frontend:${CI_PIPELINE_ID}"
   DB_IMAGE: "${DOCKER_REGISTRY}/${CI_PROJECT_NAME}/db:${CI_PIPELINE_ID}"
+
+build-backend-for-sonarqube:
+  stage: build
+  image: localhost:5000/maven:3.9.6-eclipse-temurin-17
+  tags:
+    - java
+  script:
+    - cd backend
+    - mvn clean package -DskipTests
+  artifacts:
+    paths:
+      - backend/target/*.jar
+      - backend/target/classes/
+    expire_in: 1 hour
 
 build-backend:
   stage: build
@@ -23,7 +37,7 @@ build-backend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=172.17.0.1:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
 
@@ -35,13 +49,13 @@ build-frontend:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=172.17.0.1:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
 
 test-backend:
   stage: test
-  image: localhost:5000/maven:3.9-eclipse-temurin-17
+  image: localhost:5000/maven:3.9.6-eclipse-temurin-17
   tags:
     - java
   script:
@@ -70,9 +84,12 @@ sonar-scan:
       sonar-scanner
       -Dsonar.projectKey=${CI_PROJECT_NAME}
       -Dsonar.sources=backend/src
+      -Dsonar.java.binaries=backend/target/classes
       -Dsonar.host.url=${SONAR_HOST_URL}
       -Dsonar.token=${SONAR_TOKEN}
       -Dsonar.qualitygate.wait=false
+  dependencies:
+    - build-backend-for-sonarqube
 
 push-artifacts-back:
   stage: push
@@ -82,7 +99,7 @@ push-artifacts-back:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=172.17.0.1:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${BACKEND_IMAGE} ./backend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
@@ -98,7 +115,7 @@ push-artifacts-front:
   services:
     - name: localhost:5000/docker:24-dind
       alias: docker
-      command: ["--insecure-registry=172.17.0.1:5051"]
+      command: ["--insecure-registry=192.168.0.102:5001"]
   script:
     - docker build -t ${FRONTEND_IMAGE} ./frontend
     - echo "${NEXUS_PASSWORD}" | docker login ${DOCKER_REGISTRY} -u ${NEXUS_USER} --password-stdin
