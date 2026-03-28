@@ -1,2 +1,6 @@
 ---
-# Handlers for java-react-docker
+- name: restart docker
+  systemd:
+    name: docker
+    state: restarted
+    daemon_reload: yes

@@ -1,2 +1,5 @@
 ---
-# Default variables for java-react-docker deploy
+app_dir: "/opt/{{ project_name }}"
+db_name: "app_db"
+db_user: "admin_db"
+db_password: "12345"

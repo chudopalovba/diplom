@@ -1,2 +1,168 @@
 ---
-# Deploy tasks for java-react-docker
+# ============================================
+# 1. Создание директории проекта
+# ============================================
+- name: Create app directory
+  file:
+    path: "{{ app_dir }}"
+    state: directory
+    mode: '0755'
+
+# ============================================
+# 2. Логин в Docker Registry
+# ============================================
+- name: Login to Nexus Docker Registry
+  shell: |
+    echo "{{ nexus_password }}" | docker login {{ docker_registry }} -u {{ nexus_user }} --password-stdin
+
+# ============================================
+# 3. Скачивание docker-compose.yml из Nexus
+# ============================================
+- name: Download docker-compose.yml
+  get_url:
+    url: "{{ nexus_url }}/repository/{{ nexus_repo }}/{{ project_name }}/{{ pipeline_id }}/docker-compose.yml"
+    dest: "{{ app_dir }}/docker-compose.yml"
+    url_username: "{{ nexus_user }}"
+    url_password: "{{ nexus_password }}"
+    force: yes
+    mode: '0644'
+
+# ============================================
+# 4. Подстановка переменных в docker-compose.yml
+# ============================================
+- name: Substitute PROJECT_NAME
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{PROJECT_NAME\}'
+    replace: "{{ project_name }}"
+
+- name: Substitute PIPELINE_ID
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{PIPELINE_ID\}'
+    replace: "{{ pipeline_id }}"
+
+- name: Substitute DB_NAME
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_NAME:-[^}]*\}'
+    replace: "{{ db_name }}"
+
+- name: Substitute DB_NAME without default
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_NAME\}'
+    replace: "{{ db_name }}"
+
+- name: Substitute DB_USER
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_USER:-[^}]*\}'
+    replace: "{{ db_user }}"
+
+- name: Substitute DB_USER without default
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_USER\}'
+    replace: "{{ db_user }}"
+
+- name: Substitute DB_PASSWORD
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_PASSWORD:-[^}]*\}'
+    replace: "{{ db_password }}"
+
+- name: Substitute DB_PASSWORD without default
+  replace:
+    path: "{{ app_dir }}/docker-compose.yml"
+    regexp: '\$\{DB_PASSWORD\}'
+    replace: "{{ db_password }}"
+
+# ============================================
+# 5. Остановка предыдущей версии
+# ============================================
+- name: Stop existing containers
+  shell: |
+    cd {{ app_dir }}
+    docker compose down --remove-orphans 2>/dev/null || true
+
+# ============================================
+# 6. Очистка старых образов
+# ============================================
+- name: Remove old project images
+  shell: |
+    docker images --filter "reference={{ docker_registry }}/{{ project_name }}/*" -q | xargs -r docker rmi -f 2>/dev/null || true
+
+# ============================================
+# 7. Pull и запуск
+# ============================================
+- name: Pull new images
+  shell: |
+    cd {{ app_dir }}
+    docker compose pull
+  retries: 3
+  delay: 10
+  register: pull_result
+  until: pull_result.rc == 0
+
+- name: Start containers
+  shell: |
+    cd {{ app_dir }}
+    docker compose up -d
+
+# ============================================
+# 8. Проверка здоровья
+# ============================================
+- name: Wait for PostgreSQL
+  shell: |
+    docker exec {{ project_name }}-db pg_isready -U {{ db_user }}
+  register: pg_ready
+  retries: 30
+  delay: 2
+  until: pg_ready.rc == 0
+  ignore_errors: yes
+
+- name: Wait for backend
+  uri:
+    url: "http://localhost:8080/api/tasks"
+    method: GET
+    status_code: 200
+  register: backend_health
+  retries: 30
+  delay: 5
+  until: backend_health.status == 200
+  ignore_errors: yes
+
+- name: Wait for frontend
+  uri:
+    url: "http://localhost:80"
+    method: GET
+    status_code: 200
+  register: frontend_health
+  retries: 10
+  delay: 3
+  until: frontend_health.status == 200
+  ignore_errors: yes
+
+# ============================================
+# 9. Результат
+# ============================================
+- name: Show running containers
+  shell: docker ps --filter "name={{ project_name }}"
+  register: containers
+
+- name: Deployment result
+  debug:
+    msg: |
+      ==========================================
+      Project: {{ project_name }}
+      Pipeline: {{ pipeline_id }}
+      ==========================================
+      DB:       {{ 'OK' if pg_ready.rc == 0 else 'FAILED' }}
+      Backend:  {{ 'OK' if backend_health.status == 200 else 'FAILED' }}
+      Frontend: {{ 'OK' if frontend_health.status == 200 else 'FAILED' }}
+      ==========================================
+      Frontend: http://{{ ansible_host }}
+      API:      http://{{ ansible_host }}:8080/api/tasks
+      ==========================================
+      {{ containers.stdout }}
