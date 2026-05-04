@@ -1,2 +1,9 @@
 ---
-# Default variables for java-react-no-docker deploy
+app_dir: "/opt/{{ project_name }}"
+web_root: "/var/www/{{ project_name }}"
+db_user: "admin_db"
+db_password: "12345"
+deploy_user: "sys_ansible"
+
+# Порты по умолчанию для бэкендов
+backend_port: "{{ 8080 if backend_type == 'java' else 8000 if backend_type == 'python' else 5000 }}"
