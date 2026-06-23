@@ -1,6 +1,0 @@
----
-- name: Deploy python + vue application (docker)
-  hosts: app
-  become: yes
-  roles:
-    - deploy

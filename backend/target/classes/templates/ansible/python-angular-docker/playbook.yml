@@ -1,6 +1,0 @@
----
-- name: Deploy python + angular application (docker)
-  hosts: app
-  become: yes
-  roles:
-    - deploy

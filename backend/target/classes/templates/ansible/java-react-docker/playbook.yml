@@ -1,6 +1,0 @@
----
-- name: Deploy Docker project
-  hosts: deploy_server
-  become: yes
-  roles:
-    - deploy
