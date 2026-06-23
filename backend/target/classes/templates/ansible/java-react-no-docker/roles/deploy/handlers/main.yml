@@ -1,2 +1,15 @@
 ---
-# Handlers for java-react-no-docker
+- name: restart nginx
+  service:
+    name: nginx
+    state: restarted
+
+- name: daemon-reload
+  systemd:
+    daemon_reload: yes
+
+- name: restart backend
+  service:
+    name: "{{ project_name }}"
+    state: restarted
+    enabled: yes
